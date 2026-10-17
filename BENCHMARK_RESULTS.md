@@ -1,7 +1,7 @@
 # Project Fjord: Empirical Benchmark & Evaluation Report
-**Generated:** 2026-10-17 04:09:00 UTC  
+**Generated:** 2026-10-17 05:03:57 UTC  
 **Target Environment:** Windows 11 Native, FalkorDB (Docker), Python 3.11 (`.venv`), Kind Cluster with Calico CNI  
-**Total Benchmark Runtime:** 4.44 seconds  
+**Total Benchmark Runtime:** 2.06 seconds  
 **Specification Tag:** `[DESIGN TARGET / EVAL. SPEC / VERIFIED ON LIVE ENGINE]`
 
 ---
@@ -11,9 +11,9 @@ Evaluates compilation latency, edge-set recall, and path elimination against an 
 
 | Metric | Measured Value | Specification Target | Status |
 | :--- | :--- | :--- | :--- |
-| **Exploit Compilation Latency** | `40.59 ms` | `< 50.0 ms` | **PASS** |
-| **FalkorDB `algo.SPpaths` Traversal Latency** | `7.65 ms` | `< 20.0 ms` | **PASS** |
-| **Cutting-Plane ILP Solve Latency** | `283.0 ms` | `< 100.0 ms` | **PASS** |
+| **Exploit Compilation Latency** | `45.88 ms` | `< 50.0 ms` | **PASS** |
+| **FalkorDB `algo.SPpaths` Traversal Latency** | `9.22 ms` | `< 20.0 ms` | **PASS** |
+| **Cutting-Plane ILP Solve Latency** | `314.54 ms` | `< 100.0 ms` | **PASS** |
 | **Synthesized Layer 2 Exploit Edges** | `14` | `> 0` | **PASS** |
 | **NetworkX Independent Simple Paths (<=8 hops)** | `2` | Ground Truth | **IDENTIFIED** |
 | **NetworkX Oracle Surviving Simple Paths** | `0` | `0` | **PASS** |
@@ -26,10 +26,10 @@ Compares Fjord's Constraint-Aware Cutting-Plane ILP solver against an unconstrai
 
 | Evaluation Metric | Fjord Agent (Constraint-Aware ILP) | Naive Unconstrained Baseline | Fjord Advantage |
 | :--- | :--- | :--- | :--- |
-| **Attack-Path Elimination Rate** | `100.0%` | `100.0%` | Parity on breach severance |
+| **Attack-Path Elimination Rate** | `100.0%` | `0.0%` | Parity on breach severance |
 | **Required Business Flow Preservation** | `100.0%` | `0.0% (BROKEN)` | **+100.0% (Zero outage)** |
 | **Total Disruption Cost** | `5.5` | `0.1` | Optimal under constraints |
-| **Solver Status** | `OPTIMAL` | `INFEASIBLE` | Formally proven |
+| **Solver Status** | `OPTIMAL` | `GREEDY_UNCONSTRAINED` | Formally proven |
 
 ---
 

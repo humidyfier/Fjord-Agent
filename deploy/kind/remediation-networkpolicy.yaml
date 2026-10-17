@@ -3,6 +3,9 @@ kind: NetworkPolicy
 metadata:
   name: isolate-crown-jewel
   namespace: fjord-t0
+  annotations:
+    fjord.security/managed-by: fjord-remediation-agent
+    fjord.security/remediation-note: "[Case 1: Dedicated Policy Created] Isolate crown-jewel-db from unauthorized ingress"
 spec:
   podSelector:
     matchLabels:

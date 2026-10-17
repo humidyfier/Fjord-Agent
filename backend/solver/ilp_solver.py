@@ -26,6 +26,10 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+import warnings
+warnings.filterwarnings("ignore", message=".*NumPy version.*")
+warnings.filterwarnings("ignore", category=UserWarning)
+
 import numpy as np
 from scipy.optimize import LinearConstraint, Bounds, milp
 

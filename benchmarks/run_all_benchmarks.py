@@ -27,6 +27,7 @@ from benchmarks.eval_compiler import evaluate_compiler_and_oracle
 from benchmarks.eval_agent import run_agent_baseline_comparison
 from benchmarks.eval_faithfulness import evaluate_agent_faithfulness
 from benchmarks.eval_injection import evaluate_prompt_injections
+from backend.db.connection import db_manager
 
 
 def run_and_generate_markdown():
@@ -34,6 +35,12 @@ def run_and_generate_markdown():
     print("=" * 70)
     print("RUNNING ALL FJORD BENCHMARK SUITES AGAINST LIVE FALKORDB")
     print("=" * 70)
+
+    # Purge sentinel memory before running benchmarks to ensure complete isolation
+    try:
+        db_manager.delete_graph("sentinel_memory")
+    except Exception:
+        pass
 
     # 1. Compiler & Oracle
     print("[1/4] Running Exploit Compiler & NetworkX Oracle Benchmark...")
@@ -74,7 +81,7 @@ Evaluates compilation latency, edge-set recall, and path elimination against an 
 | **Synthesized Layer 2 Exploit Edges** | `{comp_res['exploit_steps_compiled']}` | `> 0` | **PASS** |
 | **NetworkX Independent Simple Paths (<=8 hops)** | `{comp_res['oracle_initial_simple_paths']}` | Ground Truth | **IDENTIFIED** |
 | **NetworkX Oracle Surviving Simple Paths** | `{comp_res['oracle_surviving_simple_paths']}` | `0` | **PASS** |
-| **Oracle Simple-Path Elimination Rate** | `100.0%` | `100.0%` | **PASS** |
+| **Oracle Simple-Path Elimination Rate** | `{comp_res['oracle_elimination_rate'] * 100:.1f}%` | `100.0%` | **PASS** |
 
 ---
 

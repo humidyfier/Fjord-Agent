@@ -237,3 +237,67 @@ def test_flight_recorder_logging(tmp_path):
     e2 = json.loads(lines[1])
     assert e2["event_type"] == "TOOL_RESULT"
     assert e2["payload"]["duration_ms"] == 12.5
+
+
+# ============================================================================
+# TEST 7: Secret & Token Redaction
+# ============================================================================
+
+def test_secret_and_token_redaction():
+    """Verify that:
+    1. IngestionEngine never stores raw Secret values in FalkorDB (only secret_keys).
+    2. sanitize_untrusted_data redacts AWS keys, bearer tokens, private keys, and passwords.
+    """
+    # 1. Guardrail regex redaction
+    sample_text = (
+        "AWS config: AKIAIOSFODNN7EXAMPLE\n"
+        "Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMC6Y51i5\n"
+        "RSA Key:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Y...\n-----END RSA PRIVATE KEY-----\n"
+        "password: SuperSecretPassword123"
+    )
+    sanitized = sanitize_untrusted_data(sample_text)
+    assert "AKIAIOSFODNN7EXAMPLE" not in sanitized
+    assert "[REDACTED_AWS_ACCESS_KEY]" in sanitized
+    assert "eyJhbGciOiJIUzI1NiIsInR5cCI" not in sanitized
+    assert "[REDACTED_BEARER_TOKEN]" in sanitized
+    assert "SuperSecretPassword123" not in sanitized
+    assert "[REDACTED_CREDENTIAL]" in sanitized
+    assert "-----BEGIN RSA PRIVATE KEY-----" not in sanitized
+    assert "[REDACTED_PRIVATE_KEY]" in sanitized
+
+    # 2. IngestionEngine secret redaction
+    secret_yaml = """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-db-creds
+  namespace: default
+type: Opaque
+data:
+  password: c3VwZXJzZWNyZXRwYXNzd29yZDEyMw==
+stringData:
+  api_key: sk_live_this_should_never_be_stored
+"""
+    test_graph = "test_redaction_graph"
+    db_manager.delete_graph(test_graph)
+    try:
+        engine = IngestionEngine()
+        engine.parse_k8s_yaml(secret_yaml)
+        engine.resolve_cni_and_populate_graph(test_graph)
+
+        rows = db_manager.query(
+            test_graph,
+            "MATCH (c:CrownJewel {id: 'default/test-db-creds'}) RETURN c.secret_keys, c.data, c.stringData, c.password, c.api_key",
+            read_only=True,
+        )
+        assert len(rows) == 1
+        secret_keys, raw_data, string_data, pwd, key = rows[0]
+        assert "password" in secret_keys
+        assert "api_key" in secret_keys
+        assert raw_data is None
+        assert string_data is None
+        assert pwd is None
+        assert key is None
+    finally:
+        db_manager.delete_graph(test_graph)
+

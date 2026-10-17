@@ -431,12 +431,109 @@ def test_yaml_generator_collateral_split_annotation():
         gen = NetworkPolicyYAMLGenerator(g)
         yaml_patches = gen.generate([action])
 
-        assert len(yaml_patches) == 1, "Must produce exactly one manifest"
-        manifest = yaml.safe_load(yaml_patches[0])
-        audit_note = manifest["metadata"]["annotations"].get("fjord.security/remediation-note", "")
-        assert "Collateral Split" in audit_note or "shared" in audit_note.lower(), (
-            f"Collateral split advisory must appear in annotation. Got: {audit_note!r}"
+        assert len(yaml_patches) == 2, f"Must produce 2 manifests for collateral split, got {len(yaml_patches)}"
+        parsed = [yaml.safe_load(p) for p in yaml_patches]
+        notes = [p["metadata"]["annotations"].get("fjord.security/remediation-note", "") for p in parsed]
+        assert any("Collateral Split" in n or "shared" in n.lower() for n in notes), (
+            f"Collateral split advisory must appear in annotations. Got: {notes!r}"
         )
 
     finally:
         db_manager.delete_graph(g)
+
+
+# ---------------------------------------------------------------------------
+# T2-8: YAML generator handles all 3 policy cases correctly
+# ---------------------------------------------------------------------------
+
+def test_yaml_generator_three_policy_cases():
+    """
+    Verifies all 3 policy generation cases:
+    Case 1: No existing policy on target workload -> 1 dedicated manifest created.
+    Case 2: 1 dedicated policy on target workload -> 1 updated dedicated manifest.
+    Case 3: Shared policy on target + collateral workload -> 2 manifests:
+            (a) Narrowed policy for collateral workload(s).
+            (b) Dedicated policy for target workload.
+    """
+    g = f"test_yaml_3cases_{uuid.uuid4().hex[:6]}"
+    db_manager.delete_graph(g)
+    try:
+        # --- Case 1: Target has no policy ---
+        db_manager.query(g, """
+        MERGE (w1:Workload {id: 'c1/app-client', name: 'app-client', namespace: 'c1'})
+        MERGE (w2:Workload {id: 'c1/app-server', name: 'app-server', namespace: 'c1'})
+        MERGE (w1)-[:CAN_REACH_NET {port: 8080}]->(w2)
+        """)
+        action1 = RemediationAction(
+            action_id="act_case1",
+            remediation_type=RemediationType.NETWORK_POLICY_ADD,
+            description="Block client -> server",
+            mutation_cypher="MATCH (a:Workload {id: $src_id})-[r:CAN_REACH_NET]->(b:Workload {id: $dst_id}) DELETE r",
+            mutation_params={"src_id": "c1/app-client", "dst_id": "c1/app-server"},
+            severs_edge_keys=["c1/app-client-->c1/app-server"],
+            disruption_cost=1.0,
+        )
+        gen1 = NetworkPolicyYAMLGenerator(g)
+        manifests1 = gen1.generate([action1])
+        assert len(manifests1) == 1
+        m1 = yaml.safe_load(manifests1[0])
+        assert "Case 1" in m1["metadata"]["annotations"]["fjord.security/remediation-note"]
+
+        # --- Case 2: Target has dedicated policy (selects only target) ---
+        db_manager.query(g, """
+        MERGE (w3:Workload {id: 'c2/dedicated-server', name: 'dedicated-server', namespace: 'c2'})
+        MERGE (w4:Workload {id: 'c2/dedicated-client', name: 'dedicated-client', namespace: 'c2'})
+        MERGE (np_ded:NetworkPolicy {id: 'c2/server-netpol', name: 'server-netpol', namespace: 'c2'})
+        MERGE (np_ded)-[:SELECTS]->(w3)
+        MERGE (w4)-[:CAN_REACH_NET {port: 8080}]->(w3)
+        """)
+        action2 = RemediationAction(
+            action_id="act_case2",
+            remediation_type=RemediationType.NETWORK_POLICY_ADD,
+            description="Block dedicated client -> server",
+            mutation_cypher="MATCH (a:Workload {id: $src_id})-[r:CAN_REACH_NET]->(b:Workload {id: $dst_id}) DELETE r",
+            mutation_params={"src_id": "c2/dedicated-client", "dst_id": "c2/dedicated-server"},
+            severs_edge_keys=["c2/dedicated-client-->c2/dedicated-server"],
+            disruption_cost=1.0,
+        )
+        gen2 = NetworkPolicyYAMLGenerator(g)
+        manifests2 = gen2.generate([action2])
+        assert len(manifests2) == 1
+        m2 = yaml.safe_load(manifests2[0])
+        assert "Case 2" in m2["metadata"]["annotations"]["fjord.security/remediation-note"]
+
+        # --- Case 3: Target shares policy with collateral workload ---
+        db_manager.query(g, """
+        MERGE (w_tgt:Workload {id: 'c3/target-app', name: 'target-app', namespace: 'c3'})
+        MERGE (w_col:Workload {id: 'c3/collateral-app', name: 'collateral-app', namespace: 'c3'})
+        MERGE (w_bad:Workload {id: 'c3/attacker-app', name: 'attacker-app', namespace: 'c3'})
+        MERGE (np_sh:NetworkPolicy {id: 'c3/shared-netpol', name: 'shared-netpol', namespace: 'c3'})
+        MERGE (np_sh)-[:SELECTS]->(w_tgt)
+        MERGE (np_sh)-[:SELECTS]->(w_col)
+        MERGE (w_bad)-[:CAN_REACH_NET {port: 8080}]->(w_tgt)
+        """)
+        action3 = RemediationAction(
+            action_id="act_case3",
+            remediation_type=RemediationType.NETWORK_POLICY_ADD,
+            description="Block attacker -> target",
+            mutation_cypher="MATCH (a:Workload {id: $src_id})-[r:CAN_REACH_NET]->(b:Workload {id: $dst_id}) DELETE r",
+            mutation_params={"src_id": "c3/attacker-app", "dst_id": "c3/target-app"},
+            severs_edge_keys=["c3/attacker-app-->c3/target-app"],
+            disruption_cost=1.0,
+        )
+        gen3 = NetworkPolicyYAMLGenerator(g)
+        manifests3 = gen3.generate([action3])
+        assert len(manifests3) == 2, f"Case 3 must emit 2 manifests (narrowed shared + dedicated), got {len(manifests3)}"
+
+        parsed3 = [yaml.safe_load(m) for m in manifests3]
+        narrowed = [m for m in parsed3 if m["metadata"]["name"].endswith("-narrowed")]
+        dedicated = [m for m in parsed3 if not m["metadata"]["name"].endswith("-narrowed")]
+
+        assert len(narrowed) == 1
+        assert narrowed[0]["metadata"]["labels"]["fjord.security/split-from"] == "shared-netpol"
+        assert len(dedicated) == 1
+        assert "Case 3" in dedicated[0]["metadata"]["annotations"]["fjord.security/remediation-note"]
+
+    finally:
+        db_manager.delete_graph(g)
+

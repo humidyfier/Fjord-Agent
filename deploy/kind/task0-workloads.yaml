@@ -35,6 +35,7 @@ metadata:
   name: ingress-proxy-svc
   namespace: fjord-t0
 spec:
+  type: LoadBalancer
   selector:
     app: ingress-proxy
   ports:
@@ -116,3 +117,13 @@ spec:
   ports:
   - port: 8080
     targetPort: 8080
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: crown-jewel-secret
+  namespace: fjord-t0
+type: Opaque
+data:
+  db_password: "c3VwZXJzZWNyZXRwYXNzd29yZA=="
+

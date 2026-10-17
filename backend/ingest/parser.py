@@ -759,8 +759,13 @@ class IngestionEngine:
         for cj in self.crown_jewels.values():
             graph.query(
                 "MERGE (cj:CrownJewel {id: $id}) "
-                "SET cj.name = $name, cj.category = $cat",
-                params={"id": cj["id"], "name": cj["name"], "cat": cj.get("category", "SENSITIVE_DATA")}
+                "SET cj.name = $name, cj.category = $cat, cj.secret_keys = $secret_keys",
+                params={
+                    "id": cj["id"],
+                    "name": cj["name"],
+                    "cat": cj.get("category", "SENSITIVE_DATA"),
+                    "secret_keys": cj.get("secret_keys", [])
+                }
             )
 
         # H. Create WorkerNode nodes

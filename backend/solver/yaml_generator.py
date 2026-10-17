@@ -267,15 +267,15 @@ class NetworkPolicyYAMLGenerator:
         )
         return {str(r[0]) for r in rows if r[0]}
 
-    def _find_shared_policy(
+    def _find_shared_policy_info(
         self,
         workload_id: str,
         workload_labels: Dict[str, str],
-    ) -> Optional[str]:
+    ) -> Optional[Tuple[str, List[str]]]:
         """
         Check if this workload is currently selected by a NetworkPolicy node
         that also selects other workloads (shared policy — collateral split needed).
-        Returns the shared policy name if found, else None.
+        Returns (shared_policy_name, collateral_workload_ids) if found, else None.
         """
         rows = db_manager.query(
             self.graph_name,
@@ -288,18 +288,52 @@ class NetworkPolicyYAMLGenerator:
         )
         for row in rows:
             np_name = str(row[0]) if row[0] else str(row[1])
-            # Check if this NP also selects other workloads
+            np_id = str(row[1])
             other_rows = db_manager.query(
                 self.graph_name,
                 """
-                MATCH (np:NetworkPolicy {name: $np_name})-[:SELECTS]->(w:Workload)
-                WHERE w.id <> $wid
-                RETURN count(w) AS others
+                MATCH (np:NetworkPolicy)-[:SELECTS]->(w:Workload)
+                WHERE (np.name = $np_name OR np.id = $np_id) AND w.id <> $wid
+                RETURN w.id AS other_wid
                 """,
-                params={"np_name": np_name, "wid": workload_id},
+                params={"np_name": np_name, "np_id": np_id, "wid": workload_id},
                 read_only=True,
             )
-            if other_rows and other_rows[0][0] and int(other_rows[0][0]) > 0:
+            if other_rows:
+                collaterals = [str(r[0]) for r in other_rows if r[0]]
+                if collaterals:
+                    return np_name, collaterals
+        return None
+
+    def _find_dedicated_policy(self, workload_id: str) -> Optional[str]:
+        """
+        Check if this workload has an existing dedicated NetworkPolicy
+        (a policy that selects only this workload).
+        """
+        rows = db_manager.query(
+            self.graph_name,
+            """
+            MATCH (np:NetworkPolicy)-[:SELECTS]->(w:Workload {id: $wid})
+            RETURN np.name AS np_name, np.id AS np_id
+            """,
+            params={"wid": workload_id},
+            read_only=True,
+        )
+        for row in rows:
+            np_name = str(row[0]) if row[0] else str(row[1])
+            np_id = str(row[1])
+            other_rows = db_manager.query(
+                self.graph_name,
+                """
+                MATCH (np:NetworkPolicy)-[:SELECTS]->(w:Workload)
+                WHERE (np.name = $np_name OR np.id = $np_id) AND w.id <> $wid
+                RETURN count(w)
+                """,
+                params={"np_name": np_name, "np_id": np_id, "wid": workload_id},
+                read_only=True,
+            )
+            count = int(other_rows[0][0]) if (other_rows and other_rows[0][0]) else 0
+            if count == 0:
                 return np_name
         return None
 

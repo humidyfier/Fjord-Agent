@@ -17,6 +17,7 @@ import asyncio
 import json
 import uuid
 import hashlib
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -354,7 +355,7 @@ def run_agent_pipeline(req: AgentRunRequest):
     timeline = []
 
     # 1. Posture Summary
-    t0 = asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else 0
+    t0 = time.time()
     posture = orchestrator.execute_tool("get_posture_and_cluster_summary", {"graph_name": snapshot})
     _push_event(req.session_id, "tool_call", {
         "tool": "get_posture_and_cluster_summary",

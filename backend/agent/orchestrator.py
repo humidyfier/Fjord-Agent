@@ -56,14 +56,6 @@ class AgentOrchestrator:
         start_time = time.time()
         self.logger.log_tool_call(tool_name, arguments)
 
-        # Enforce quota check
-        try:
-            guardrail_manager.check_and_increment_quota(tool_name)
-        except QuotaExceededError as qe:
-            duration = (time.time() - start_time) * 1000
-            self.logger.log_tool_result(tool_name, None, duration, error=str(qe))
-            raise
-
         tool_func = getattr(tools, tool_name, None)
         if not tool_func or not callable(tool_func):
             err_msg = f"Unknown tool: '{tool_name}'"

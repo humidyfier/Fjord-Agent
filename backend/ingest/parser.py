@@ -50,6 +50,7 @@ class IngestionEngine:
         self.role_bindings: List[Dict[str, Any]] = []
         self.worker_nodes: Dict[str, Dict[str, Any]] = {}
         self.crown_jewels: Dict[str, Dict[str, Any]] = {}
+        self.entry_points: Dict[str, Dict[str, Any]] = {}
         self.iam_roles: Dict[str, Dict[str, Any]] = {}
         self.iam_policies: Dict[str, Dict[str, Any]] = {}
         self.posture_findings: Dict[str, Dict[str, Any]] = {}
@@ -224,7 +225,12 @@ class IngestionEngine:
 
         # If NodePort or LoadBalancer, create EntryPoint
         if svc_type in ["LoadBalancer", "NodePort"]:
-            ep_key = f"ep-svc-{namespace}-{name}"
+            ep_key = "entry:internet"
+            self.entry_points[ep_key] = {
+                "id": ep_key,
+                "name": "Internet Gateway",
+                "entry_type": "EXTERNAL"
+            }
             self.edges.append({
                 "type": "EXPOSES",
                 "from_label": NODE_LABELS["ENTRY_POINT"],
@@ -236,7 +242,12 @@ class IngestionEngine:
 
     def _parse_ingress(self, doc: dict, name: str, namespace: str, labels: dict):
         key = f"{namespace}/{name}"
-        ep_key = f"ep-ingress-{namespace}-{name}"
+        ep_key = "entry:internet"
+        self.entry_points[ep_key] = {
+            "id": ep_key,
+            "name": "Internet Gateway",
+            "entry_type": "EXTERNAL"
+        }
         self.ingresses[key] = {"id": key, "name": name, "namespace": namespace}
 
         # EntryPoint -> Ingress
@@ -247,6 +258,23 @@ class IngestionEngine:
             "to_label": NODE_LABELS["INGRESS"],
             "to_id": key,
             "props": {"public": True}
+        })
+
+    def add_assume_breach_workload(self, workload_id: str):
+        """Creates an assume-breach entry point node targeting a specific workload."""
+        ep_key = f"entry:breach:{workload_id}"
+        self.entry_points[ep_key] = {
+            "id": ep_key,
+            "name": f"Assumed Breach: {workload_id}",
+            "entry_type": "ASSUME_BREACH"
+        }
+        self.edges.append({
+            "type": "EXPOSES",
+            "from_label": NODE_LABELS["ENTRY_POINT"],
+            "from_id": ep_key,
+            "to_label": NODE_LABELS["WORKLOAD"],
+            "to_id": workload_id,
+            "props": {"assume_breach": True}
         })
 
         # Routes to backend services
@@ -753,6 +781,18 @@ class IngestionEngine:
                     "sev": pf.get("severity", "MEDIUM"), "cat": pf.get("category", "VULNERABILITY"),
                     "cvss": pf.get("cvss_score", 0.0), "is_rce": pf.get("is_rce", False),
                     "title": pf.get("title", "")
+                }
+            )
+
+        # J2. Create EntryPoint nodes (idempotent MERGE)
+        for ep in self.entry_points.values():
+            graph.query(
+                f"MERGE (ep:{NODE_LABELS['ENTRY_POINT']} {{id: $id}}) "
+                "SET ep.name = $name, ep.entry_type = $entry_type",
+                params={
+                    "id": ep["id"],
+                    "name": ep.get("name", ep["id"]),
+                    "entry_type": ep.get("entry_type", "EXTERNAL")
                 }
             )
 

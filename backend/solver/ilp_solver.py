@@ -160,6 +160,26 @@ class CuttingPlaneILPSolver:
             sa_id, role_id = str(row[0]), str(row[1])
             edge_key = f"{sa_id}-->{role_id}"
             cost = REMEDIATION_BASE_COSTS[RemediationType.SERVICE_ACCOUNT_UNBIND]
+
+            # Query exploit-plane edges enabled by this SA -> Role binding
+            affected_cypher = """
+            MATCH (w:Workload)-[:USES_SA]->(sa:ServiceAccount {id: $sa_id})-[:BOUND_TO]->(r:RBACRole {id: $role_id})
+            OPTIONAL MATCH (cj:CrownJewel)
+            WHERE (cj.category = 'K8S_SECRET' OR cj.type = 'Opaque') AND (r.namespace = 'cluster' OR r.namespace = cj.namespace)
+            RETURN w.id AS wid, cj.id AS cjid
+            """
+            aff_rows = db_manager.query(
+                self.graph_name,
+                affected_cypher,
+                params={"sa_id": sa_id, "role_id": role_id},
+                read_only=True
+            )
+            severs_keys = [edge_key]
+            for arow in aff_rows:
+                wid, cjid = arow[0], arow[1]
+                if wid and cjid:
+                    severs_keys.append(f"{wid}-->{cjid}")
+
             actions.append(RemediationAction(
                 action_id=f"rbac_unbind_{sa_id.replace('/', '_')}_{uuid.uuid4().hex[:6]}",
                 remediation_type=RemediationType.SERVICE_ACCOUNT_UNBIND,
@@ -169,7 +189,7 @@ class CuttingPlaneILPSolver:
                     "DELETE b"
                 ),
                 mutation_params={"sa_id": sa_id, "role_id": role_id},
-                severs_edge_keys=[edge_key],
+                severs_edge_keys=severs_keys,
                 disruption_cost=cost,
                 forbidden=False,
             ))
@@ -197,6 +217,53 @@ class CuttingPlaneILPSolver:
                 ),
                 mutation_params={"wl_id": wl_id, "node_id": node_id},
                 severs_edge_keys=[edge_key],
+                disruption_cost=cost,
+                forbidden=False,
+            ))
+
+        # --- Candidate class 4: Cloud IAM Revocation (sever ASSUMES_IAM_ROLE edges) ---
+        iam_edges = db_manager.query(
+            self.graph_name,
+            """
+            MATCH (sa:ServiceAccount)-[r:ASSUMES_IAM_ROLE]->(ir:IAMRole)
+            RETURN sa.id AS sa_id, ir.id AS role_id
+            """,
+            read_only=True,
+        )
+        for row in iam_edges:
+            sa_id, role_id = str(row[0]), str(row[1])
+            edge_key = f"{sa_id}-->{role_id}"
+            cost = REMEDIATION_BASE_COSTS.get(RemediationType.RBAC_ROLE_RESTRICT, 2.5)
+
+            # Query exploit-plane edges enabled by this IRSA bridge
+            affected_cypher = """
+            MATCH (w:Workload)-[:USES_SA]->(sa:ServiceAccount {id: $sa_id})-[:ASSUMES_IAM_ROLE]->(ir:IAMRole {id: $role_id}),
+                  (cj:CrownJewel)
+            WHERE cj.category STARTS WITH 'AWS_'
+            RETURN w.id AS wid, cj.id AS cjid
+            """
+            aff_rows = db_manager.query(
+                self.graph_name,
+                affected_cypher,
+                params={"sa_id": sa_id, "role_id": role_id},
+                read_only=True,
+            )
+            severs_keys = [edge_key]
+            for arow in aff_rows:
+                wid, cjid = arow[0], arow[1]
+                if wid and cjid:
+                    severs_keys.append(f"{wid}-->{cjid}")
+
+            actions.append(RemediationAction(
+                action_id=f"iam_revoke_{sa_id.replace('/', '_')}_{uuid.uuid4().hex[:6]}",
+                remediation_type=RemediationType.RBAC_ROLE_RESTRICT,
+                description=f"Revoke IRSA IAM AssumeRole: detach {sa_id} from {role_id}",
+                mutation_cypher=(
+                    "MATCH (sa:ServiceAccount {id: $sa_id})-[r:ASSUMES_IAM_ROLE]->(ir:IAMRole {id: $role_id}) "
+                    "DELETE r"
+                ),
+                mutation_params={"sa_id": sa_id, "role_id": role_id},
+                severs_edge_keys=severs_keys,
                 disruption_cost=cost,
                 forbidden=False,
             ))

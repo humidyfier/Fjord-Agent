@@ -98,20 +98,25 @@ class FalkorDBManager:
         src_val: str = "virtual-super-source",
         dst_label: str = "VirtualSink",
         dst_prop: str = "id",
-        dst_val: str = "virtual-super-sink"
+        dst_val: str = "virtual-super-sink",
+        rel_types: Optional[List[str]] = None,
     ) -> List[Any]:
         """
         Find shortest paths between source and destination using native FalkorDB algo.SPpaths.
+        Defaults to relTypes: ['EXPLOIT_STEP'] to strictly traverse the compiled Exploit State Plane.
         FalkorDB procedure signature:
         MATCH (s:Label {prop: val}), (d:Label {prop: val})
-        CALL algo.SPpaths({sourceNode: s, targetNode: d}) YIELD path RETURN path
+        CALL algo.SPpaths({sourceNode: s, targetNode: d, relTypes: $rel_types}) YIELD path RETURN path
         """
+        if rel_types is None:
+            rel_types = ["EXPLOIT_STEP"]
+
         cypher = f"""
         MATCH (s:{src_label} {{{src_prop}: $src_val}}), (d:{dst_label} {{{dst_prop}: $dst_val}})
-        CALL algo.SPpaths({{sourceNode: s, targetNode: d}}) YIELD path
+        CALL algo.SPpaths({{sourceNode: s, targetNode: d, relTypes: $rel_types}}) YIELD path
         RETURN path
         """
-        return self.query(graph_name, cypher, params={"src_val": src_val, "dst_val": dst_val})
+        return self.query(graph_name, cypher, params={"src_val": src_val, "dst_val": dst_val, "rel_types": rel_types})
 
     def _track_snapshot(self, graph_name: str):
         """Track snapshot in LRU cache."""

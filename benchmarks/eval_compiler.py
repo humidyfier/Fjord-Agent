@@ -103,6 +103,8 @@ def evaluate_compiler_and_oracle() -> Dict[str, Any]:
         "ingest_time_ms": round(ingest_time_ms, 2),
         "compile_time_ms": round(compile_time_ms, 2),
         "sppaths_time_ms": round(sppaths_time_ms, 2),
+        "pure_milp_time_ms": round(res.pure_milp_time_ms, 2),
+        "e2e_cutting_plane_time_ms": round(res.total_loop_time_ms, 2),
         "solve_time_ms": round(solve_time_ms, 2),
         "exploit_steps_compiled": stats.get("total_exploit_steps", len(edge_rows)),
         "falkordb_shortest_paths_found": len(falkor_paths),

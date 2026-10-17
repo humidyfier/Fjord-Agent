@@ -67,22 +67,36 @@ class NetworkPolicyYAMLGenerator:
             List of YAML strings (one per unique target workload).
         """
         # Group block edges by destination workload (the workload being protected)
+        yaml_patches: List[str] = []
         # Key: dst_workload_id → set of src_workload_ids to block
         block_map: Dict[str, Set[str]] = {}
 
         for action in actions:
-            if action.remediation_type not in (
+            if action.remediation_type in (
                 RemediationType.NETWORK_POLICY_ADD,
                 RemediationType.NETWORK_POLICY_PATCH,
             ):
-                continue
-            # Extract src and dst from mutation_params
-            src_id = action.mutation_params.get("src_id", "")
-            dst_id = action.mutation_params.get("dst_id", "")
-            if src_id and dst_id:
-                block_map.setdefault(dst_id, set()).add(src_id)
+                src_id = action.mutation_params.get("src_id", "")
+                dst_id = action.mutation_params.get("dst_id", "")
+                if src_id and dst_id:
+                    block_map.setdefault(dst_id, set()).add(src_id)
+            elif action.remediation_type == RemediationType.SERVICE_ACCOUNT_UNBIND:
+                sa_id = action.mutation_params.get("sa_id", "")
+                role_id = action.mutation_params.get("role_id", "")
+                try:
+                    patch = self._generate_rbac_unbind_manifest(sa_id, role_id)
+                    yaml_patches.append(patch)
+                except Exception as exc:
+                    logger.error("Failed to generate RBAC unbind manifest for %s -> %s: %s", sa_id, role_id, exc)
+            elif action.remediation_type == RemediationType.RBAC_ROLE_RESTRICT:
+                sa_id = action.mutation_params.get("sa_id", "")
+                role_name = action.mutation_params.get("role_name", "") or action.mutation_params.get("role_id", "")
+                try:
+                    patch = self._generate_iam_revoke_manifest(sa_id, role_name)
+                    yaml_patches.append(patch)
+                except Exception as exc:
+                    logger.error("Failed to generate IAM revoke manifest for %s -> %s: %s", sa_id, role_name, exc)
 
-        yaml_patches: List[str] = []
         for dst_id, blocked_sources in block_map.items():
             try:
                 patches = self._generate_policies_for_workload(dst_id, blocked_sources)
@@ -91,7 +105,7 @@ class NetworkPolicyYAMLGenerator:
                 logger.error("Failed to generate NetworkPolicy for %s: %s", dst_id, exc)
 
         logger.info(
-            "Generated %d NetworkPolicy manifests for graph %s",
+            "Generated %d remediation manifests for graph %s",
             len(yaml_patches), self.graph_name,
         )
         return yaml_patches
@@ -210,6 +224,53 @@ class NetworkPolicyYAMLGenerator:
         manifests.append(yaml.dump(dedicated_manifest, default_flow_style=False, sort_keys=False))
 
         return manifests
+
+    def _generate_rbac_unbind_manifest(self, sa_id: str, role_id: str) -> str:
+        """Synthesise a Kubernetes RoleBinding/ClusterRoleBinding manifest that severs the SA binding."""
+        sa_ns, sa_name = _parse_workload_id(sa_id)
+        role_ns, role_name = _parse_workload_id(role_id)
+        is_cluster_scoped = (role_ns in ("cluster", "default", ""))
+        binding_kind = "ClusterRoleBinding" if is_cluster_scoped else "RoleBinding"
+        role_kind = "ClusterRole" if is_cluster_scoped else "Role"
+        binding_name = f"remediate-unbind-{sa_name}-{role_name}"
+        manifest = {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": binding_kind,
+            "metadata": {
+                "name": binding_name,
+                "annotations": {
+                    FJORD_MANAGED_ANNOTATION: FJORD_MANAGED_VALUE,
+                    FJORD_AUDIT_ANNOTATION: f"[RBAC Unbind] Sever unauthorized privilege escalation binding {sa_id} -> {role_id}",
+                },
+            },
+            "subjects": [],
+            "roleRef": {
+                "kind": role_kind,
+                "name": role_name,
+                "apiGroup": "rbac.authorization.k8s.io",
+            },
+        }
+        if not is_cluster_scoped:
+            manifest["metadata"]["namespace"] = role_ns
+        return yaml.dump(manifest, default_flow_style=False, sort_keys=False)
+
+    def _generate_iam_revoke_manifest(self, sa_id: str, role_name: str) -> str:
+        """Synthesise a Kubernetes ServiceAccount patch manifest removing overly permissive cloud IRSA roles."""
+        sa_ns, sa_name = _parse_workload_id(sa_id)
+        manifest = {
+            "apiVersion": "v1",
+            "kind": "ServiceAccount",
+            "metadata": {
+                "name": sa_name,
+                "namespace": sa_ns,
+                "annotations": {
+                    FJORD_MANAGED_ANNOTATION: FJORD_MANAGED_VALUE,
+                    FJORD_AUDIT_ANNOTATION: f"[IAM Revoke] Remove eks.amazonaws.com/role-arn annotation for {role_name}",
+                    "eks.amazonaws.com/role-arn": None,
+                },
+            },
+        }
+        return yaml.dump(manifest, default_flow_style=False, sort_keys=False)
 
     def _build_ingress_rule(
         self,

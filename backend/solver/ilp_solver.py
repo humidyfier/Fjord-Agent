@@ -21,6 +21,7 @@ All graph traversals use parameterized Cypher — never raw string interpolation
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
@@ -83,6 +84,8 @@ class SolverResult:
     iterations: int
     surviving_paths: int
     verification_status: VerificationStatus
+    pure_milp_time_ms: float = 0.0
+    total_loop_time_ms: float = 0.0
 
 
 class CuttingPlaneILPSolver:
@@ -356,6 +359,8 @@ class CuttingPlaneILPSolver:
         selected_actions: List[RemediationAction] = []
         solver_status = "infeasible"
         total_cost = 0.0
+        total_pure_milp_ms = 0.0
+        start_loop = time.perf_counter()
 
         for iteration in range(1, max_iter + 1):
             logger.debug("Cutting-plane iteration %d / %d", iteration, max_iter)
@@ -392,11 +397,12 @@ class CuttingPlaneILPSolver:
 
             # 3. Assemble and solve MILP
             try:
-                selected_indices, obj_val = self._solve_milp(
+                selected_indices, obj_val, m_time = self._solve_milp(
                     costs=costs,
                     cut_rows=cut_rows,
                     n=n,
                 )
+                total_pure_milp_ms += m_time
             except ValueError as exc:
                 logger.error("MILP infeasible: %s", exc)
                 solver_status = "infeasible"
@@ -479,6 +485,7 @@ class CuttingPlaneILPSolver:
                 break
 
         surviving = self._count_active_paths(self.graph_name)
+        total_loop_time_ms = (time.perf_counter() - start_loop) * 1000
 
         return SolverResult(
             candidate_set_id=candidate_set_id,
@@ -490,6 +497,8 @@ class CuttingPlaneILPSolver:
             verification_status=(
                 VerificationStatus.UNVERIFIED  # Sandbox must verify before VERIFIED_IN_MODEL
             ),
+            pure_milp_time_ms=round(total_pure_milp_ms, 2),
+            total_loop_time_ms=round(total_loop_time_ms, 2),
         )
 
     # ------------------------------------------------------------------
@@ -501,11 +510,11 @@ class CuttingPlaneILPSolver:
         costs: np.ndarray,
         cut_rows: List[np.ndarray],
         n: int,
-    ) -> Tuple[List[int], float]:
+    ) -> Tuple[List[int], float, float]:
         """
         Call scipy.optimize.milp to solve the binary hitting-set ILP.
 
-        Returns (list of selected column indices, objective value).
+        Returns (list of selected column indices, objective value, execution_time_ms).
         Raises ValueError if infeasible.
         """
         # Stack constraint matrix
@@ -517,19 +526,21 @@ class CuttingPlaneILPSolver:
         bounds = Bounds(lb=0.0, ub=1.0)           # 0 <= x_m <= 1
         integrality = np.ones(n, dtype=int)       # all variables are binary integers
 
+        start_m = time.perf_counter()
         res = milp(
             c=costs,
             constraints=constraints,
             integrality=integrality,
             bounds=bounds,
         )
+        duration_ms = (time.perf_counter() - start_m) * 1000
 
         if res.status not in (0, 1):  # 0=optimal, 1=iteration limit (acceptable approx)
             raise ValueError(f"MILP infeasible or unbounded: {res.message}")
 
         # Collect selected indices (x_m rounded to nearest integer)
         selected = [i for i, val in enumerate(res.x) if round(val) == 1]
-        return selected, float(res.fun)
+        return selected, float(res.fun), duration_ms
 
     def _get_active_paths(self, graph_name: str) -> List[List[str]]:
         """

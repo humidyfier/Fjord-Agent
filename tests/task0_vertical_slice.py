@@ -25,9 +25,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
 if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", line_buffering=True)
 
 from backend.db.connection import db_manager
 from backend.db.compiler import ExploitGraphCompiler
@@ -227,8 +227,8 @@ spec:
   ingress: []
 """
     netpol_yaml.write_text(netpol_content, encoding="utf-8")
-    subprocess.run(["kubectl", "apply", "-f", str(netpol_yaml)], check=True)
-    print(f"[+] Applied {netpol_yaml}. Waiting 3s for Calico dataplane synchronization...")
+    apply_res = subprocess.run(["kubectl", "apply", "-f", str(netpol_yaml)], capture_output=True, text=True, check=True)
+    print(f"[+] Applied {netpol_yaml}: {apply_res.stdout.strip()}. Waiting 3s for Calico dataplane synchronization...")
     time.sleep(3)
 
     # -------------------------------------------------------------

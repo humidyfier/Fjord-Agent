@@ -197,38 +197,59 @@ class SandboxManager:
 
     def _count_broken_required_deps(self, src_graph: str, sandbox_name: str) -> int:
         """
-        Compare required dependency edges between the source graph and the sandbox.
-        A broken required flow means a REQUIRED_DEPENDENCY edge that existed in the
-        source was removed by a mutation in the sandbox.
+        Compare required dependency edges and connectivity between the source graph and the sandbox.
+        A broken required flow means:
+        1. A REQUIRED_DEPENDENCY edge that existed in the source was removed in the sandbox, OR
+        2. Two workloads with a REQUIRED_DEPENDENCY in the source no longer have CAN_REACH_NET
+           connectivity in the sandbox (i.e. network policy broke the required business flow).
 
-        Returns count of required dependency edges that no longer exist in sandbox.
+        Returns count of broken required flows.
         """
-        # Required deps in original graph
         src_rows = db_manager.query(
             src_graph,
             """
             MATCH (a)-[:REQUIRED_DEPENDENCY]->(b)
-            RETURN a.id AS src_id, b.id AS dst_id
+            RETURN DISTINCT a.id AS src_id, b.id AS dst_id
             """,
             read_only=True,
         )
         if not src_rows:
             return 0
 
-        required_pairs = {(str(r[0]), str(r[1])) for r in src_rows}
+        broken_count = 0
+        for r in src_rows:
+            src_id, dst_id = str(r[0]), str(r[1])
+            # Check if REQUIRED_DEPENDENCY is still present in sandbox
+            req_check = db_manager.query(
+                sandbox_name,
+                """
+                MATCH (a {id: $src_id})-[r:REQUIRED_DEPENDENCY]->(b {id: $dst_id})
+                RETURN count(r)
+                """,
+                params={"src_id": src_id, "dst_id": dst_id},
+                read_only=True,
+            )
+            has_req = bool(req_check and req_check[0][0] > 0)
+            if not has_req:
+                broken_count += 1
+                continue
 
-        # Required deps still in sandbox
-        sandbox_rows = db_manager.query(
-            sandbox_name,
-            """
-            MATCH (a)-[:REQUIRED_DEPENDENCY]->(b)
-            RETURN a.id AS src_id, b.id AS dst_id
-            """,
-            read_only=True,
-        )
-        sandbox_pairs = {(str(r[0]), str(r[1])) for r in sandbox_rows}
+            # If both nodes are Workloads, check if CAN_REACH_NET was severed
+            net_check = db_manager.query(
+                sandbox_name,
+                """
+                MATCH (a:Workload {id: $src_id}), (b:Workload {id: $dst_id})
+                OPTIONAL MATCH (a)-[r:CAN_REACH_NET]->(b)
+                RETURN a IS NOT NULL AND b IS NOT NULL AS are_workloads, r IS NOT NULL AS has_net
+                """,
+                params={"src_id": src_id, "dst_id": dst_id},
+                read_only=True,
+            )
+            if net_check:
+                are_workloads, has_net = net_check[0]
+                if are_workloads and not has_net:
+                    broken_count += 1
 
-        broken = required_pairs - sandbox_pairs
-        if broken:
-            logger.warning("Broken required flows in sandbox: %s", broken)
-        return len(broken)
+        if broken_count > 0:
+            logger.warning("Broken required flows in sandbox: %d", broken_count)
+        return broken_count

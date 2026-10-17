@@ -15,9 +15,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
   
-  <!-- 3D Force WebGL Graph via Three.js CDN -->
-  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-  <script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -214,190 +211,200 @@
     <!-- ================================================================= -->
     <main class="flex-1 flex flex-col bg-archival-bg overflow-hidden relative min-w-0">
 
-      <!-- Top Workspace Global Header Bar -->
-      <header class="h-12 bg-archival-surface arch-border-b px-4 flex items-center justify-between shrink-0 z-10">
-        <div class="flex items-center space-x-3">
-          <span class="font-display font-bold text-xs tracking-wider uppercase text-archival-ink">
-            FJORD // ATTACK-PATH REMEDIATION WORKSPACE
+      <!-- Top Workspace Global Header Bar (Single-Line, No Button Wrapping) -->
+      <!-- Top Workspace Global Header Bar (Strict Single-Line Flexbox, Zero Overflow) -->
+      <header class="header-bar bg-archival-surface arch-border-b px-3 flex items-center justify-between shrink-0 z-10 overflow-x-auto">
+        <div class="flex items-center space-x-2 shrink-0">
+          <span class="font-display font-bold text-xs tracking-wider uppercase text-archival-ink whitespace-nowrap">
+            FJORD AGENT
           </span>
-          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-archival-stone arch-border text-archival-muted">
+          <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-archival-stone arch-border text-archival-muted whitespace-nowrap">
             SCENARIO: <span id="dash-active-scenario" class="font-bold text-archival-ink">sample_cluster</span>
           </span>
         </div>
 
-        <!-- Top Bar Action Controls -->
-        <div class="flex items-center space-x-2">
+        <!-- Top Bar Action Controls (Strict Single-Line Flexbox) -->
+        <div class="flex items-center space-x-1.5 shrink-0 whitespace-nowrap">
           
           <!-- Upload Button -->
-          <button onclick="openUploadModal()" class="px-2.5 py-1.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-xs font-mono font-bold transition flex items-center space-x-1.5 shadow-sm">
-            <i class="fa-solid fa-cloud-arrow-up text-wiz-blue text-[11px]"></i>
-            <span>+ UPLOAD MANIFEST / SCAN</span>
+          <button onclick="openUploadModal()" title="Upload Manifest or Scan" class="px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-xs font-mono font-bold transition flex items-center space-x-1 shadow-sm whitespace-nowrap shrink-0">
+            <i class="fa-solid fa-cloud-arrow-up text-wiz-blue text-[10px]"></i>
+            <span>+ UPLOAD</span>
           </button>
 
           <!-- Prod / Sandbox Diff Toggle -->
-          <div class="inline-flex rounded arch-border bg-archival-stone p-0.5 text-xs font-mono">
-            <button onclick="toggleGraphView('prod')" id="btn-toggle-prod" class="px-2.5 py-1 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition">
+          <div class="inline-flex rounded arch-border bg-archival-stone p-0.5 text-xs font-mono shrink-0 whitespace-nowrap">
+            <button onclick="toggleGraphView('prod')" id="btn-toggle-prod" class="px-2 py-0.5 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition whitespace-nowrap">
               prod_cluster
             </button>
-            <button onclick="toggleGraphView('sandbox')" id="btn-toggle-sandbox" class="px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition">
+            <button onclick="toggleGraphView('sandbox')" id="btn-toggle-sandbox" class="px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink font-semibold transition whitespace-nowrap">
               sandbox_sim
             </button>
           </div>
 
           <!-- Run Remediation Agent Button -->
-          <button onclick="runRemediationPipeline()" class="px-3 py-1.5 rounded bg-obsidian-900 hover:bg-obsidian-800 text-archival-cream text-xs font-mono font-bold transition flex items-center space-x-1.5 shadow">
+          <button onclick="runRemediationPipeline()" title="Run Remediation Agent" class="px-2.5 py-1 rounded bg-obsidian-900 hover:bg-obsidian-800 text-archival-cream text-xs font-mono font-bold transition flex items-center space-x-1 shadow whitespace-nowrap shrink-0">
             <i class="fa-solid fa-bolt text-wiz-ochre text-[10px]"></i>
-            <span>RUN REMEDIATION AGENT</span>
+            <span>RUN AGENT</span>
           </button>
 
           <!-- Retractable Right Inspector Toggle -->
-          <button onclick="toggleRightInspector()" id="btn-inspector-toggle" title="Toggle Record Inspector Drawer" class="px-2.5 py-1.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-xs font-mono font-bold transition flex items-center space-x-1">
-            <span id="inspector-toggle-label">» Hide Inspector</span>
+          <button onclick="toggleRightInspector()" id="btn-inspector-toggle" title="Toggle Record Inspector Drawer" class="px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-xs font-mono font-bold transition flex items-center space-x-1 whitespace-nowrap shrink-0">
+            <span id="inspector-toggle-label">» Inspector</span>
           </button>
         </div>
       </header>
 
       <!-- =============================================================== -->
-      <!-- VIEW 1: DASHBOARD (5 Interactive KPI Blocks + 2D/3D Graph Canvas) -->
+      <!-- VIEW 1: DASHBOARD (4 Sleek KPI Blocks + Wiz Attack Path Canvas)  -->
       <!-- =============================================================== -->
       <div id="view-dashboard" class="flex-1 flex flex-col overflow-hidden">
         
-        <!-- 5-Block Interactive Architectural KPI Strip -->
-        <div class="grid grid-cols-5 bg-archival-surface arch-border-b shrink-0 text-archival-ink select-none">
+        <!-- 4-Block Sleek Interactive Architectural KPI Strip (Low-Profile 80px) -->
+        <div class="grid grid-cols-4 bg-archival-surface arch-border-b shrink-0 text-archival-ink select-none kpi-strip">
           
           <!-- KPI 1: Toxic Combinations -->
-          <div onclick="drillDownToxicCombinations()" class="kpi-card p-3 arch-border-r space-y-1" title="Click to highlight toxic chains and inspect multi-factor risk breakdown">
+          <div onclick="drillDownToxicCombinations()" class="kpi-card p-2.5 arch-border-r flex flex-col justify-between" title="Click to highlight toxic chains and inspect multi-factor risk breakdown">
             <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
               <span>TOXIC COMBINATIONS</span>
               <span class="w-2 h-2 rounded-full bg-wiz-crimson animate-ping"></span>
             </div>
-            <div class="flex items-baseline space-x-1.5">
-              <span id="kpi-toxic-count" class="font-display font-bold text-3xl tracking-tight text-wiz-crimson">1</span>
-              <span class="text-[10px] font-mono text-archival-faint">ACTIVE CHAIN</span>
+            <div class="flex items-baseline space-x-1.5 my-0.5">
+              <span id="kpi-toxic-count" class="font-display font-bold text-2xl tracking-tight text-wiz-crimson">1</span>
+              <span class="text-[9px] font-mono text-archival-faint">ACTIVE CHAIN</span>
             </div>
-            <div class="text-[10px] font-mono text-wiz-crimson truncate font-semibold">
+            <div class="text-[9px] font-mono text-wiz-crimson truncate font-semibold">
               <i class="fa-solid fa-triangle-exclamation mr-1"></i>Ingress &rarr; CVE &rarr; DB
             </div>
           </div>
 
           <!-- KPI 2: Attack Paths -->
-          <div onclick="drillDownAttackPaths()" class="kpi-card p-3 arch-border-r space-y-1" title="Click to focus camera on shortest breach path & inspect exploit proof">
+          <div onclick="drillDownAttackPaths()" class="kpi-card p-2.5 arch-border-r flex flex-col justify-between" title="Click to focus on shortest breach path & inspect exploit proof">
             <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
-              <span>ATTACK PATHS</span>
+              <span>ACTIVE ATTACK PATHS</span>
               <i class="fa-solid fa-route text-wiz-crimson text-xs"></i>
             </div>
-            <div class="flex items-baseline space-x-1.5">
-              <span id="kpi-path-count" class="font-display font-bold text-3xl tracking-tight text-wiz-crimson">1</span>
-              <span class="text-[10px] font-mono text-archival-faint">HOPS: 3</span>
+            <div class="flex items-baseline space-x-1.5 my-0.5">
+              <span id="kpi-path-count" class="font-display font-bold text-2xl tracking-tight text-wiz-crimson">1</span>
+              <span class="text-[9px] font-mono text-archival-faint">PATH · 3 HOPS</span>
             </div>
-            <div class="text-[10px] font-mono text-archival-muted truncate">
-              FalkorDB <code class="bg-archival-stone px-1 py-0.5 rounded text-[9px]">algo.SPpaths</code>
+            <div class="text-[9px] font-mono text-archival-muted truncate">
+              FalkorDB <code class="bg-archival-stone px-1 py-0.5 rounded text-[8px]">algo.SPpaths</code>
             </div>
           </div>
 
           <!-- KPI 3: On-Path Findings -->
-          <div onclick="drillDownOnPathFindings()" class="kpi-card p-3 arch-border-r space-y-1" title="Click to compare On-Path Reachable CVEs vs Filtered Noise">
+          <div onclick="drillDownOnPathFindings()" class="kpi-card p-2.5 arch-border-r flex flex-col justify-between" title="Click to compare On-Path Reachable CVEs vs Filtered Noise">
             <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
               <span>ON-PATH FINDINGS</span>
               <i class="fa-solid fa-bullseye text-wiz-ochre text-xs"></i>
             </div>
-            <div class="flex items-baseline space-x-1.5">
-              <span id="kpi-findings-count" class="font-display font-bold text-3xl tracking-tight text-wiz-ochre">1</span>
-              <span class="text-[10px] font-mono text-archival-faint">OF 10 TOTAL</span>
+            <div class="flex items-baseline space-x-1.5 my-0.5">
+              <span id="kpi-findings-count" class="font-display font-bold text-2xl tracking-tight text-wiz-ochre">1</span>
+              <span class="text-[9px] font-mono text-archival-faint">CRITICAL / 9 NOISE</span>
             </div>
-            <div class="text-[10px] font-mono text-wiz-emerald truncate font-semibold">
+            <div class="text-[9px] font-mono text-wiz-emerald truncate font-semibold">
               <i class="fa-solid fa-filter mr-1"></i>90% Noise Filtered
             </div>
           </div>
 
-          <!-- KPI 4: Sandbox Verified -->
-          <div onclick="drillDownSandboxVerified()" class="kpi-card p-3 arch-border-r space-y-1" title="Click to toggle sandbox_sim mode & view verification proof">
+          <!-- KPI 4: Sandbox & Solver Status -->
+          <div onclick="drillDownSandboxVerified()" class="kpi-card p-2.5 flex flex-col justify-between" title="Click to toggle sandbox_sim mode & view verification proof">
             <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
-              <span>SANDBOX VERIFIED</span>
+              <span>SANDBOX & SOLVER STATUS</span>
               <i class="fa-solid fa-shield-halved text-wiz-emerald text-xs"></i>
             </div>
-            <div class="flex items-baseline space-x-1.5">
-              <span id="kpi-sandbox-status" class="font-display font-bold text-3xl tracking-tight text-wiz-emerald">100%</span>
-              <span class="text-[10px] font-mono text-archival-faint">SURVIVING: 0</span>
+            <div class="flex items-baseline space-x-1.5 my-0.5">
+              <span id="kpi-sandbox-status" class="font-display font-bold text-2xl tracking-tight text-wiz-emerald">100%</span>
+              <span class="text-[9px] font-mono text-archival-faint">ELIMINATED · 11.4ms</span>
             </div>
-            <div class="text-[10px] font-mono text-archival-muted truncate">
-              <code class="bg-archival-stone px-1 py-0.5 rounded text-[9px]">GRAPH.COPY</code> Zero Drift
-            </div>
-          </div>
-
-          <!-- KPI 5: Solver Latency -->
-          <div onclick="drillDownSolverLatency()" class="kpi-card p-3 space-y-1" title="Click to open MILP Cutting-Plane diagnostic breakdown">
-            <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
-              <span>SOLVER LATENCY</span>
-              <i class="fa-solid fa-microchip text-wiz-blue text-xs"></i>
-            </div>
-            <div class="flex items-baseline space-x-1.5">
-              <span id="kpi-solver-time" class="font-display font-bold text-3xl tracking-tight text-archival-ink">11.4</span>
-              <span class="text-[10px] font-mono text-archival-faint">MS (MILP)</span>
-            </div>
-            <div class="text-[10px] font-mono text-wiz-blue truncate font-semibold">
-              <i class="fa-solid fa-check mr-1"></i>Target &lt; 50ms (PASS)
+            <div class="text-[9px] font-mono text-archival-muted truncate">
+              <code class="bg-archival-stone px-1 py-0.5 rounded text-[8px]">GRAPH.COPY</code> Zero Drift (PASS)
             </div>
           </div>
 
         </div>
 
-        <!-- Center Canvas Viewport with 2D / 3D Switcher Header -->
+        <!-- Center Canvas Viewport: Exact Wiz-Style Horizontal SVG Attack Path -->
         <div class="flex-1 flex flex-col relative overflow-hidden bg-archival-surface">
           
-          <!-- Canvas Toolbar Header -->
-          <div class="h-9 bg-archival-stone/70 arch-border-b px-4 flex items-center justify-between shrink-0 text-xs font-mono text-archival-muted z-10">
-            <div class="flex items-center space-x-2">
-              <span class="font-bold text-archival-ink">TOPOLOGY VIEW:</span>
-              <div class="inline-flex rounded arch-border bg-archival-surface p-0.5">
-                <button onclick="switchCanvasMode('2d')" id="btn-canvas-2d" class="px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold shadow-xs">
-                  <i class="fa-solid fa-diagram-project mr-1"></i>2D Architecture Blueprint
-                </button>
-                <button onclick="switchCanvasMode('3d')" id="btn-canvas-3d" class="px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink">
-                  <i class="fa-solid fa-cube mr-1"></i>3D Force WebGL Graph
-                </button>
+          <div id="wiz-attack-canvas" class="wiz-dotted-canvas">
+            
+            <!-- Floating Top-Left Title -->
+            <div class="absolute top-3.5 left-4 z-10 pointer-events-none select-none">
+              <div class="text-[11px] font-mono font-bold tracking-wider uppercase text-archival-ink flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-wiz-crimson animate-ping"></span>
+                <span>ATTACK PATH VISUALIZATION // CRITICAL BREACH TRAJECTORY</span>
               </div>
-              <div class="h-4 w-px bg-archival-border mx-1"></div>
-              <div class="inline-flex rounded arch-border bg-archival-surface p-0.5">
-                <button onclick="setGraphLayer('layer1')" id="btn-layer1" class="px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold">
-                  Layer 1: Full Posture
-                </button>
-                <button onclick="setGraphLayer('layer2')" id="btn-layer2" class="px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink">
-                  Layer 2: Attack Paths Only
-                </button>
+              <div class="text-[9px] font-mono text-archival-muted">
+                Deterministic Left-to-Right Exposure Graph · FalkorDB Exploit Plane
               </div>
             </div>
 
-            <!-- Canvas Zoom & Fit Controls -->
-            <div class="flex items-center space-x-1.5">
-              <button onclick="fitCanvasView()" class="px-2 py-0.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink font-bold" title="Fit to Screen">
-                <i class="fa-solid fa-expand text-[10px]"></i> Fit
-              </button>
-              <button onclick="zoomCanvas(1.2)" class="px-2 py-0.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink font-bold" title="Zoom In">
+            <!-- Floating Top-Right Controls: View Mode & Cluster Pill -->
+            <div class="absolute top-3.5 right-4 z-10 flex items-center space-x-2">
+              <div class="inline-flex rounded arch-border bg-archival-surface/90 backdrop-blur-xs p-0.5 text-[11px] font-mono shadow-xs">
+                <button onclick="setGraphDisplayMode('attack')" id="btn-mode-attack" class="px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold transition">
+                  <i class="fa-solid fa-route text-wiz-crimson mr-1"></i>Attack Path View
+                </button>
+                <button onclick="setGraphDisplayMode('full')" id="btn-mode-full" class="px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink transition">
+                  <i class="fa-solid fa-diagram-project mr-1"></i>Full Graph
+                </button>
+              </div>
+
+              <div class="inline-flex rounded arch-border bg-archival-surface/90 backdrop-blur-xs p-0.5 text-[11px] font-mono shadow-xs">
+                <span id="canvas-cluster-pill" class="px-2 py-0.5 text-archival-ink font-bold">
+                  prod_cluster
+                </span>
+              </div>
+            </div>
+
+            <!-- Floating Bottom-Left Zoom Controls Pill -->
+            <div class="absolute bottom-4 left-4 z-10 inline-flex items-center rounded-full arch-border bg-archival-surface/95 backdrop-blur-xs p-1 shadow-md space-x-1">
+              <button onclick="zoomWizCanvas(1.15)" class="w-6 h-6 rounded-full hover:bg-archival-stone flex items-center justify-center text-archival-ink text-xs font-bold transition" title="Zoom In">
                 <i class="fa-solid fa-plus text-[10px]"></i>
               </button>
-              <button onclick="zoomCanvas(0.8)" class="px-2 py-0.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink font-bold" title="Zoom Out">
+              <button onclick="zoomWizCanvas(0.85)" class="w-6 h-6 rounded-full hover:bg-archival-stone flex items-center justify-center text-archival-ink text-xs font-bold transition" title="Zoom Out">
                 <i class="fa-solid fa-minus text-[10px]"></i>
               </button>
-              <span id="canvas-node-count-badge" class="px-2 py-0.5 rounded bg-archival-surface arch-border text-[10px] text-archival-faint font-semibold ml-2">
-                14 Nodes · 13 Edges
-              </span>
+              <button onclick="resetWizCanvas()" class="w-6 h-6 rounded-full hover:bg-archival-stone flex items-center justify-center text-archival-ink text-xs font-bold transition" title="Reset View">
+                <i class="fa-solid fa-compress text-[10px]"></i>
+              </button>
             </div>
-          </div>
 
-          <!-- Canvas Viewport Containers (2D Cytoscape & 3D WebGL) -->
-          <div class="flex-1 relative overflow-hidden">
-            <!-- 2D Cytoscape Canvas (Default) -->
-            <div id="canvas-viewport-2d" class="absolute inset-0">
+            <!-- SVG Bezier Connections Layer -->
+            <svg id="wiz-svg-layer" class="wiz-svg-layer" width="100%" height="100%">
+              <defs>
+                <linearGradient id="grad-attack" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#C93B2B" stop-opacity="0.8" />
+                  <stop offset="100%" stop-color="#E87524" stop-opacity="0.9" />
+                </linearGradient>
+                <linearGradient id="grad-workload" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#3B66E4" stop-opacity="0.8" />
+                  <stop offset="100%" stop-color="#C93B2B" stop-opacity="0.9" />
+                </linearGradient>
+                <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#C93B2B" />
+                </marker>
+                <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#7E42D8" />
+                </marker>
+                <marker id="arrow-gray" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#8E8A80" />
+                </marker>
+              </defs>
+              <g id="wiz-svg-paths"></g>
+            </svg>
+
+            <!-- HTML Circular Nodes Overlay Layer -->
+            <div id="wiz-nodes-layer" class="absolute inset-0 pointer-events-none"></div>
+
+            <!-- Full Graph Cytoscape Fallback (Hidden by default, shown when mode='full') -->
+            <div id="wiz-full-cytoscape" class="absolute inset-0 hidden pointer-events-auto bg-archival-surface">
               <div id="topology-canvas" class="w-full h-full"></div>
             </div>
 
-            <!-- 3D Force WebGL Canvas (Toggled via Switcher) -->
-            <div id="canvas-viewport-3d" class="absolute inset-0 hidden">
-              <div id="3d-graph-container" class="w-full h-full"></div>
-            </div>
           </div>
-
         </div>
 
         <!-- Lower Pending Actions & Remediation Queue Strip -->

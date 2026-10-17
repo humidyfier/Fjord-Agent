@@ -131,7 +131,7 @@ def test_command_center_html_ui():
     assert "FJORD AGENT" in html
     assert "KUBERNETES & CLOUD ATTACK-PATH REMEDIATION ENGINE" in html
     assert "cytoscape" in html
-    assert "3d-force-graph" in html
+    assert "wiz-attack-canvas" in html
     assert "topology-canvas" in html
     assert "RECORD INSPECTOR" in html
     assert "AGENT COPILOT" in html

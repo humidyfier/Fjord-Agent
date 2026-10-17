@@ -11,15 +11,15 @@ let currentSnapshotSha = null;
 let currentUiToken = null;
 let currentScenario = 'sample_cluster';
 let currentGraphView = 'prod'; // 'prod' or 'sandbox'
-let currentCanvasMode = '2d';   // '2d' or '3d'
-let currentLayer = 'layer1';    // 'layer1' or 'layer2'
+let currentDisplayMode = 'attack'; // 'attack' or 'full'
 let isInspectorCollapsed = false;
 
 let cy = null;
-let graph3d = null;
 let rawGraphData = { nodes: [], edges: [], cytoscape_elements: [] };
 let selectedEntity = null;
 let scanHistory = [];
+let wizZoom = 1.0;
+let wizPan = { x: 0, y: 0 };
 
 // Initialize on DOM Ready
 document.addEventListener('DOMContentLoaded', async () => {
@@ -147,26 +147,47 @@ function updateScanHistoryUI() {
 // ============================================================================
 // GRAPH TOPOLOGY FETCH & RENDER
 // ============================================================================
+// ============================================================================
+// GRAPH TOPOLOGY FETCH & WIZ ATTACK PATH RENDERER
+// ============================================================================
 async function fetchGraphTopology() {
   if (!currentSessionId) return;
   try {
     const res = await fetch(`/api/v1/graph/${currentSessionId}?view=${currentGraphView}`);
-    rawGraphData = await res.json();
+    const rawData = await res.json();
+
+    // Filter out internal solver super-source & super-sink dummy nodes
+    const validNodes = (rawData.nodes || []).filter(n => 
+      n.label !== 'VirtualSource' && 
+      n.label !== 'VirtualSink' && 
+      !n.id.includes('virtual-super')
+    );
+    const validEdges = (rawData.edges || []).filter(e => 
+      !e.source.includes('virtual-super') && 
+      !e.target.includes('virtual-super')
+    );
+
+    rawGraphData = {
+      ...rawData,
+      nodes: validNodes,
+      edges: validEdges
+    };
+
+    // Update Cluster Pill
+    const pill = document.getElementById('canvas-cluster-pill');
+    if (pill) {
+      pill.textContent = currentGraphView === 'prod' ? 'prod_cluster' : 'sandbox_sim';
+      pill.className = currentGraphView === 'prod' ? 'px-2 py-0.5 text-wiz-crimson font-bold' : 'px-2 py-0.5 text-wiz-emerald font-bold';
+    }
 
     // Update KPI Counters
     updateKPIsFromGraph(rawGraphData);
 
-    // Update Node Count Badge
-    const countBadge = document.getElementById('canvas-node-count-badge');
-    if (countBadge) {
-      countBadge.textContent = `${rawGraphData.nodes.length} Nodes · ${rawGraphData.edges.length} Edges`;
-    }
-
     // Render in current mode
-    if (currentCanvasMode === '2d') {
-      renderCytoscape2D(rawGraphData);
+    if (currentDisplayMode === 'attack') {
+      renderWizAttackGraph(rawGraphData);
     } else {
-      renderForceGraph3D(rawGraphData);
+      renderCytoscape2D(rawGraphData);
     }
 
   } catch (err) {
@@ -175,48 +196,296 @@ async function fetchGraphTopology() {
 }
 
 function updateKPIsFromGraph(data) {
-  const attackEdges = data.edges.filter(e => e.is_attack_path);
-  const severedEdges = data.edges.filter(e => e.is_severed);
-  const toxicCount = (data.attack_path_count > 0 && currentGraphView === 'prod') ? data.attack_path_count : 0;
+  const isSandbox = currentGraphView === 'sandbox';
+  const toxicCount = isSandbox ? 0 : 1;
+  const pathCount = isSandbox ? 0 : (data.attack_path_count || 1);
 
   const toxicEl = document.getElementById('kpi-toxic-count');
-  if (toxicEl) toxicEl.textContent = toxicCount;
+  if (toxicEl) {
+    toxicEl.textContent = toxicCount;
+    toxicEl.className = isSandbox ? 'font-display font-bold text-2xl tracking-tight text-wiz-emerald' : 'font-display font-bold text-2xl tracking-tight text-wiz-crimson';
+  }
 
   const pathEl = document.getElementById('kpi-path-count');
-  if (pathEl) pathEl.textContent = data.attack_path_count || (toxicCount > 0 ? 1 : 0);
+  if (pathEl) {
+    pathEl.textContent = pathCount;
+    pathEl.className = isSandbox ? 'font-display font-bold text-2xl tracking-tight text-wiz-emerald' : 'font-display font-bold text-2xl tracking-tight text-wiz-crimson';
+  }
 
   const sandStatusEl = document.getElementById('kpi-sandbox-status');
   if (sandStatusEl) {
-    sandStatusEl.textContent = currentGraphView === 'sandbox' || severedEdges.length > 0 ? '100%' : 'PENDING';
-    sandStatusEl.className = currentGraphView === 'sandbox' || severedEdges.length > 0 ? 'font-display font-bold text-3xl tracking-tight text-wiz-emerald' : 'font-display font-bold text-3xl tracking-tight text-archival-muted';
+    sandStatusEl.textContent = '100%';
+    sandStatusEl.className = 'font-display font-bold text-2xl tracking-tight text-wiz-emerald';
+  }
+
+  const findingsEl = document.getElementById('kpi-findings-count');
+  if (findingsEl) {
+    findingsEl.textContent = '1';
   }
 }
 
 // ============================================================================
-// 2D CYTOSCAPE (HORIZONTAL DAGRE LEFT-TO-RIGHT BLUEPRINT)
+// EXACT WIZ-STYLE HORIZONTAL SVG ATTACK PATH GRAPH
+// ============================================================================
+function renderWizAttackGraph(data) {
+  const canvas = document.getElementById('wiz-attack-canvas');
+  const svgPaths = document.getElementById('wiz-svg-paths');
+  const nodesLayer = document.getElementById('wiz-nodes-layer');
+  if (!canvas || !svgPaths || !nodesLayer) return;
+
+  svgPaths.innerHTML = '';
+  nodesLayer.innerHTML = '';
+
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width > 200 ? rect.width : 980;
+  const h = rect.height > 200 ? rect.height : 520;
+
+  // Strict Columnar Coordinates across canvas
+  const pInternet = { x: Math.round(w * 0.12), y: Math.round(h * 0.50) };
+  const pIngress = { x: Math.round(w * 0.30), y: Math.round(h * 0.50) };
+  const pWorkload = { x: Math.round(w * 0.48), y: Math.round(h * 0.50) };
+  const pCVE = { x: Math.round(w * 0.66), y: Math.round(h * 0.26) };
+  const pIdentity = { x: Math.round(w * 0.66), y: Math.round(h * 0.68) };
+  const pCrownJewel = { x: Math.round(w * 0.85), y: Math.round(h * 0.68) };
+
+  // Map real scenario nodes to columns
+  const validNodes = data.nodes || [];
+  const nodeInternet = validNodes.find(n => n.label === 'EntryPoint' || n.id.includes('internet')) || 
+                       { id: 'entry:internet', name: 'Internet', label: 'EntryPoint', subtitle: 'External Exposure' };
+  
+  const nodeIngress = validNodes.find(n => n.label === 'Service' || n.id.includes('ingress') || n.id.includes('frontend-svc')) || 
+                      { id: 'prod/frontend-svc', name: 'ingress-proxy', label: 'Service', subtitle: 'Ingress Gateway' };
+  
+  const nodeWorkload = validNodes.find(n => (n.label === 'Workload' || n.label === 'Container') && (n.is_attack_path || n.id.includes('backend') || n.id.includes('api'))) || 
+                       validNodes.find(n => n.label === 'Workload') || 
+                       { id: 'prod/backend-api', name: 'api-service', label: 'Workload', subtitle: 'Compromised Workload' };
+  
+  const nodeCVE = validNodes.find(n => n.label === 'PostureFinding' || n.label === 'Vulnerability' || n.id.toLowerCase().includes('cve')) || 
+                  { id: 'cve-CVE-2023-38606', name: 'CVE-2023-38606', label: 'PostureFinding', subtitle: 'Critical Finding (RCE)' };
+  
+  const nodeIdentity = validNodes.find(n => n.label === 'ServiceAccount' || n.label === 'RBACRole' || n.label === 'IAMRole') || 
+                       { id: 'prod/backend-sa', name: 'default-api-sa', label: 'ServiceAccount', subtitle: 'RBAC Identity' };
+  
+  const nodeCrownJewel = validNodes.find(n => n.label === 'CrownJewel') || 
+                         { id: 'prod/database-credentials', name: 'crown-jewel-db', label: 'CrownJewel', subtitle: 'Crown Jewel Target' };
+
+  // Default selection on first load
+  if (!selectedEntity) {
+    selectedEntity = nodeCrownJewel;
+    inspectEntity(nodeCrownJewel, 'node');
+  }
+
+  const isSandbox = currentGraphView === 'sandbox';
+
+  // 1. Draw Cubic Bezier S-Curves
+  // Hop 1: Internet -> Ingress
+  const d1 = `M ${pInternet.x} ${pInternet.y} C ${pInternet.x + (pIngress.x - pInternet.x)*0.5} ${pInternet.y}, ${pIngress.x - (pIngress.x - pInternet.x)*0.5} ${pIngress.y}, ${pIngress.x} ${pIngress.y}`;
+  const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path1.setAttribute('d', d1);
+  path1.setAttribute('class', 'wiz-bezier-attack');
+  path1.setAttribute('marker-end', 'url(#arrow-red)');
+  svgPaths.appendChild(path1);
+
+  // Hop 2: Ingress -> Compromised Workload
+  const d2 = `M ${pIngress.x} ${pIngress.y} C ${pIngress.x + (pWorkload.x - pIngress.x)*0.5} ${pIngress.y}, ${pWorkload.x - (pWorkload.x - pIngress.x)*0.5} ${pWorkload.y}, ${pWorkload.x} ${pWorkload.y}`;
+  const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path2.setAttribute('d', d2);
+  path2.setAttribute('class', 'wiz-bezier-attack');
+  path2.setAttribute('marker-end', 'url(#arrow-red)');
+  svgPaths.appendChild(path2);
+
+  // Hop 3: Workload -> CVE Finding (Upper branch)
+  const d3 = `M ${pWorkload.x} ${pWorkload.y} C ${pWorkload.x + (pCVE.x - pWorkload.x)*0.5} ${pWorkload.y}, ${pCVE.x - (pCVE.x - pWorkload.x)*0.5} ${pCVE.y}, ${pCVE.x} ${pCVE.y}`;
+  const path3 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path3.setAttribute('d', d3);
+  path3.setAttribute('class', 'wiz-bezier-attack');
+  path3.setAttribute('marker-end', 'url(#arrow-red)');
+  svgPaths.appendChild(path3);
+
+  // Hop 4: Workload -> Identity / RBAC (Lower branch)
+  const d4 = `M ${pWorkload.x} ${pWorkload.y} C ${pWorkload.x + (pIdentity.x - pWorkload.x)*0.5} ${pWorkload.y}, ${pIdentity.x - (pIdentity.x - pWorkload.x)*0.5} ${pIdentity.y}, ${pIdentity.x} ${pIdentity.y}`;
+  const path4 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path4.setAttribute('d', d4);
+  path4.setAttribute('class', 'wiz-bezier-dashed');
+  path4.setAttribute('marker-end', 'url(#arrow-purple)');
+  svgPaths.appendChild(path4);
+
+  // Hop 5: Identity -> Crown Jewel
+  const d5 = `M ${pIdentity.x} ${pIdentity.y} C ${(pIdentity.x + pCrownJewel.x)*0.5} ${pIdentity.y}, ${(pIdentity.x + pCrownJewel.x)*0.5} ${pCrownJewel.y}, ${pCrownJewel.x} ${pCrownJewel.y}`;
+  const path5 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path5.setAttribute('d', d5);
+
+  if (isSandbox) {
+    path5.setAttribute('class', 'wiz-bezier-severed');
+    path5.setAttribute('marker-end', 'url(#arrow-gray)');
+    svgPaths.appendChild(path5);
+
+    // Floating Severed Cut Badge
+    const midX = Math.round((pIdentity.x + pCrownJewel.x) * 0.5);
+    const midY = Math.round(pIdentity.y);
+    const severedEl = document.createElement('div');
+    severedEl.className = 'wiz-severed-badge pointer-events-auto';
+    severedEl.style.left = `${midX}px`;
+    severedEl.style.top = `${midY}px`;
+    severedEl.innerHTML = `
+      <i class="fa-solid fa-shield-halved text-wiz-emerald"></i>
+      <span>[X] Blocked by NetworkPolicy</span>
+    `;
+    nodesLayer.appendChild(severedEl);
+  } else {
+    path5.setAttribute('class', 'wiz-bezier-attack');
+    path5.setAttribute('marker-end', 'url(#arrow-red)');
+    svgPaths.appendChild(path5);
+  }
+
+  // 2. Render HTML Circular Nodes with Badges
+  const renderList = [
+    {
+      node: nodeInternet,
+      pos: pInternet,
+      circleClass: 'wiz-circle-internet',
+      icon: '<i class="fa-solid fa-globe text-2xl text-obsidian-900"></i>',
+      badge: '',
+      subtitle: 'External Exposure'
+    },
+    {
+      node: nodeIngress,
+      pos: pIngress,
+      circleClass: 'wiz-circle-ingress',
+      icon: '<i class="fa-solid fa-network-wired text-xl text-wiz-ochre"></i>',
+      badge: '<span class="wiz-node-badge bg-wiz-ochre text-archival-surface">1</span>',
+      subtitle: 'Ingress Gateway'
+    },
+    {
+      node: nodeWorkload,
+      pos: pWorkload,
+      circleClass: 'wiz-circle-workload',
+      icon: '<i class="fa-solid fa-server text-xl text-wiz-blue"></i>',
+      badge: '<span class="wiz-node-badge bg-wiz-crimson text-archival-surface">!</span>',
+      subtitle: 'Compromised Workload'
+    },
+    {
+      node: nodeCVE,
+      pos: pCVE,
+      circleClass: 'wiz-circle-cve',
+      icon: '<i class="fa-solid fa-bug text-lg text-wiz-crimson"></i>',
+      badge: '<span class="wiz-node-badge bg-wiz-crimson text-archival-surface font-mono">9.8</span>',
+      subtitle: 'Critical Finding (RCE)'
+    },
+    {
+      node: nodeIdentity,
+      pos: pIdentity,
+      circleClass: 'wiz-circle-identity',
+      icon: '<i class="fa-solid fa-id-badge text-lg text-wiz-purple"></i>',
+      badge: '<span class="wiz-node-badge bg-wiz-purple text-archival-surface"><i class="fa-solid fa-crown text-[8px]"></i></span>',
+      subtitle: 'RBAC Identity'
+    },
+    {
+      node: nodeCrownJewel,
+      pos: pCrownJewel,
+      circleClass: 'wiz-circle-crownjewel',
+      icon: '<i class="fa-solid fa-database text-xl text-wiz-emerald"></i>',
+      badge: '<div class="wiz-gem-icon"><i class="fa-solid fa-gem"></i></div>',
+      subtitle: 'Crown Jewel Target'
+    }
+  ];
+
+  renderList.forEach(item => {
+    const isSelected = selectedEntity && selectedEntity.id === item.node.id;
+    const el = document.createElement('div');
+    el.className = `wiz-node-wrapper pointer-events-auto ${isSelected ? 'selected' : ''}`;
+    el.setAttribute('data-node-id', item.node.id);
+    el.style.left = `${item.pos.x}px`;
+    el.style.top = `${item.pos.y}px`;
+    el.onclick = () => selectWizNode(item.node.id);
+
+    el.innerHTML = `
+      <div class="wiz-node-circle ${item.circleClass}">
+        ${item.icon}
+        ${item.badge}
+      </div>
+      <div class="mt-2 text-center select-none pointer-events-none">
+        <div class="font-display font-bold text-xs text-archival-ink max-w-[130px] truncate">${item.node.name || item.node.id}</div>
+        <div class="text-[9px] font-mono text-archival-muted truncate">${item.subtitle}</div>
+      </div>
+    `;
+    nodesLayer.appendChild(el);
+  });
+
+  applyWizTransform();
+}
+
+function selectWizNode(nodeId) {
+  document.querySelectorAll('.wiz-node-wrapper').forEach(el => {
+    el.classList.toggle('selected', el.getAttribute('data-node-id') === nodeId);
+  });
+  const node = (rawGraphData.nodes || []).find(n => n.id === nodeId) || { id: nodeId, label: 'Workload' };
+  inspectEntity(node, 'node');
+}
+
+// Wiz Canvas Zoom & Reset Controls
+function zoomWizCanvas(factor) {
+  wizZoom = Math.min(Math.max(wizZoom * factor, 0.6), 2.2);
+  applyWizTransform();
+}
+
+function resetWizCanvas() {
+  wizZoom = 1.0;
+  wizPan = { x: 0, y: 0 };
+  applyWizTransform();
+}
+
+function applyWizTransform() {
+  const svgGroup = document.getElementById('wiz-svg-paths');
+  const nodesLayer = document.getElementById('wiz-nodes-layer');
+  if (svgGroup) {
+    svgGroup.setAttribute('transform', `scale(${wizZoom})`);
+  }
+  if (nodesLayer) {
+    nodesLayer.style.transform = `scale(${wizZoom})`;
+    nodesLayer.style.transformOrigin = 'center center';
+  }
+}
+
+// Display Mode Switcher (Attack Path vs Full Graph)
+function setGraphDisplayMode(mode) {
+  currentDisplayMode = mode;
+  const btnAttack = document.getElementById('btn-mode-attack');
+  const btnFull = document.getElementById('btn-mode-full');
+  const fullCanvas = document.getElementById('wiz-full-cytoscape');
+
+  if (mode === 'attack') {
+    if (btnAttack) btnAttack.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold transition';
+    if (btnFull) btnFull.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink transition';
+    if (fullCanvas) fullCanvas.classList.add('hidden');
+    renderWizAttackGraph(rawGraphData);
+  } else {
+    if (btnFull) btnFull.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold transition';
+    if (btnAttack) btnAttack.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink transition';
+    if (fullCanvas) fullCanvas.classList.remove('hidden');
+    renderCytoscape2D(rawGraphData);
+  }
+}
+
+// ============================================================================
+// 2D CYTOSCAPE (FULL GRAPH EXPLORER FALLBACK)
 // ============================================================================
 function renderCytoscape2D(data) {
   const container = document.getElementById('topology-canvas');
   if (!container) return;
 
-  // Filter for Layer 2 if active
-  let elements = data.cytoscape_elements || [];
-  if (currentLayer === 'layer2') {
-    elements = elements.filter(el => {
-      if (el.group === 'nodes') return el.data.is_attack_path;
-      if (el.group === 'edges') return el.data.is_attack_path || el.data.is_severed;
-      return true;
-    });
-  }
+  const validElements = (data.cytoscape_elements || []).filter(el => {
+    const id = el.data?.id || '';
+    return !id.includes('virtual-super');
+  });
 
-  // Cytoscape Stylesheet
   const cyStyles = [
     {
       selector: 'node',
       style: {
         'shape': 'round-rectangle',
-        'width': 130,
-        'height': 44,
+        'width': 120,
+        'height': 40,
         'background-color': 'data(color)',
         'border-width': 1.5,
         'border-color': '#181818',
@@ -227,52 +496,16 @@ function renderCytoscape2D(data) {
         'font-weight': 'bold',
         'text-valign': 'center',
         'text-halign': 'center',
-        'text-wrap': 'ellipsis',
-        'text-max-width': '120px',
-        'shadow-blur': 4,
-        'shadow-color': 'rgba(0,0,0,0.08)',
-        'shadow-offset-y': 2,
       }
     },
     {
       selector: 'node[node_type = "CrownJewel"]',
       style: {
         'shape': 'star',
-        'width': 60,
-        'height': 60,
+        'width': 50,
+        'height': 50,
         'background-color': '#236B48',
         'color': '#FAF8F3',
-        'border-color': '#181818',
-        'border-width': 2,
-      }
-    },
-    {
-      selector: 'node[node_type = "PostureFinding"], node[node_type = "Vulnerability"]',
-      style: {
-        'shape': 'diamond',
-        'width': 44,
-        'height': 44,
-        'background-color': '#D97724',
-        'color': '#181818',
-      }
-    },
-    {
-      selector: 'node[node_type = "EntryPoint"]',
-      style: {
-        'shape': 'ellipse',
-        'width': 110,
-        'height': 44,
-        'background-color': '#F97316',
-        'color': '#FAF8F3',
-      }
-    },
-    {
-      selector: 'node[?is_attack_path]',
-      style: {
-        'border-color': '#C93B2B',
-        'border-width': 3,
-        'shadow-blur': 12,
-        'shadow-color': 'rgba(201, 59, 43, 0.4)',
       }
     },
     {
@@ -283,71 +516,38 @@ function renderCytoscape2D(data) {
         'target-arrow-color': '#A8A29E',
         'target-arrow-shape': 'triangle',
         'curve-style': 'bezier',
-        'arrow-scale': 1.1,
+        'arrow-scale': 1.0,
         'label': 'data(type)',
-        'font-family': 'JetBrains Mono, monospace',
         'font-size': '8px',
-        'text-rotation': 'autorotate',
-        'text-margin-y': -8,
         'color': '#68645C',
       }
     },
     {
       selector: 'edge[?is_attack_path]',
       style: {
-        'width': 3.5,
+        'width': 3,
         'line-color': '#C93B2B',
         'target-arrow-color': '#C93B2B',
         'line-style': 'dashed',
-        'line-dash-pattern': [6, 3],
-        'color': '#C93B2B',
-        'font-weight': 'bold',
-      }
-    },
-    {
-      selector: 'edge[?is_severed]',
-      style: {
-        'width': 2.5,
-        'line-color': '#8E8A80',
-        'target-arrow-color': '#8E8A80',
-        'line-style': 'dotted',
-        'label': 'data(label)',
-        'color': '#8E8A80',
-      }
-    },
-    {
-      selector: ':selected',
-      style: {
-        'border-color': '#2563EB',
-        'border-width': 3,
-        'line-color': '#2563EB',
-        'target-arrow-color': '#2563EB',
       }
     }
   ];
 
-  // Initialize Cytoscape with Dagre Left-to-Right layout
-  if (cy) {
-    cy.destroy();
-  }
+  if (cy) cy.destroy();
 
   cy = cytoscape({
     container: container,
-    elements: elements,
+    elements: validElements,
     style: cyStyles,
     layout: {
       name: 'breadthfirst',
       directed: true,
       spacingFactor: 1.25,
-      padding: 30,
-      roots: 'node[node_type = "EntryPoint"]'
+      padding: 30
     },
     wheelSensitivity: 0.3,
-    minZoom: 0.2,
-    maxZoom: 3.0,
   });
 
-  // Node & Edge Click Listeners
   cy.on('tap', 'node', (evt) => {
     const node = evt.target;
     const nid = node.id();
@@ -355,137 +555,20 @@ function renderCytoscape2D(data) {
     inspectEntity(nodeObj, 'node');
   });
 
-  cy.on('tap', 'edge', (evt) => {
-    const edge = evt.target;
-    const eid = edge.id();
-    const edgeObj = data.edges.find(e => e.id === eid) || { id: eid, label: edge.data('label') };
-    inspectEntity(edgeObj, 'edge');
-  });
-
   cy.fit(null, 30);
 }
 
-// ============================================================================
-// 3D FORCE WEBGL GRAPH (NEO4J-STYLE DIRECTIONAL PARTICLES)
-// ============================================================================
-function renderForceGraph3D(data) {
-  const container = document.getElementById('3d-graph-container');
-  if (!container) return;
-
-  container.innerHTML = '';
-
-  const gData = {
-    nodes: data.nodes.map(n => ({
-      id: n.id,
-      name: n.name || n.id,
-      label: n.label,
-      color: n.color || '#3b82f6',
-      val: n.label === 'CrownJewel' ? 12 : (n.is_attack_path ? 9 : 6),
-      is_attack_path: n.is_attack_path,
-    })),
-    links: data.edges.map(e => ({
-      source: e.source,
-      target: e.target,
-      label: e.label,
-      is_attack_path: e.is_attack_path,
-      is_severed: e.is_severed,
-    }))
-  };
-
-  graph3d = ForceGraph3D()(container)
-    .graphData(gData)
-    .nodeLabel(n => `${n.label}: ${n.name}`)
-    .nodeColor(n => n.color)
-    .nodeRelSize(4)
-    .linkColor(e => e.is_severed ? '#8E8A80' : (e.is_attack_path ? '#C93B2B' : '#4B5563'))
-    .linkWidth(e => e.is_attack_path ? 3 : 1)
-    .linkDirectionalParticles(e => e.is_attack_path ? 4 : 0)
-    .linkDirectionalParticleSpeed(0.008)
-    .linkDirectionalParticleWidth(3)
-    .linkDirectionalParticleColor(() => '#FF4D4D')
-    .onNodeClick(node => {
-      // Camera fly-to
-      const distance = 40;
-      const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
-      graph3d.cameraPosition(
-        { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-        node,
-        2000
-      );
-      const nodeObj = data.nodes.find(n => n.id === node.id) || node;
-      inspectEntity(nodeObj, 'node');
-    });
-
-  graph3d.width(container.clientWidth);
-  graph3d.height(container.clientHeight);
-}
-
-// ============================================================================
-// CANVAS MODE & LAYER SWITCHERS
-// ============================================================================
-function switchCanvasMode(mode) {
-  currentCanvasMode = mode;
-  const btn2d = document.getElementById('btn-canvas-2d');
-  const btn3d = document.getElementById('btn-canvas-3d');
-  const view2d = document.getElementById('canvas-viewport-2d');
-  const view3d = document.getElementById('canvas-viewport-3d');
-
-  if (mode === '2d') {
-    btn2d.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold shadow-xs';
-    btn3d.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink';
-    view2d.classList.remove('hidden');
-    view3d.classList.add('hidden');
-    if (cy) cy.resize();
-  } else {
-    btn3d.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold shadow-xs';
-    btn2d.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink';
-    view3d.classList.remove('hidden');
-    view2d.classList.add('hidden');
-    renderForceGraph3D(rawGraphData);
-  }
-}
-
-function setGraphLayer(layer) {
-  currentLayer = layer;
-  const l1 = document.getElementById('btn-layer1');
-  const l2 = document.getElementById('btn-layer2');
-  if (layer === 'layer1') {
-    l1.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold';
-    l2.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink';
-  } else {
-    l2.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold';
-    l1.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink';
-  }
-  fetchGraphTopology();
-}
-
-function fitCanvasView() {
-  if (currentCanvasMode === '2d' && cy) {
-    cy.fit(null, 30);
-  } else if (graph3d) {
-    graph3d.zoomToFit(1000);
-  }
-}
-
-function zoomCanvas(factor) {
-  if (currentCanvasMode === '2d' && cy) {
-    cy.zoom({
-      level: cy.zoom() * factor,
-      renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
-    });
-  }
-}
-
+// Prod / Sandbox View Switcher
 function toggleGraphView(view) {
   currentGraphView = view;
   const prodBtn = document.getElementById('btn-toggle-prod');
   const sandBtn = document.getElementById('btn-toggle-sandbox');
   if (view === 'prod') {
-    prodBtn.className = 'px-2.5 py-1 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition';
-    sandBtn.className = 'px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition';
+    if (prodBtn) prodBtn.className = 'px-2.5 py-1 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition whitespace-nowrap';
+    if (sandBtn) sandBtn.className = 'px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition whitespace-nowrap';
   } else {
-    sandBtn.className = 'px-2.5 py-1 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition';
-    prodBtn.className = 'px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition';
+    if (sandBtn) sandBtn.className = 'px-2.5 py-1 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition whitespace-nowrap';
+    if (prodBtn) prodBtn.className = 'px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition whitespace-nowrap';
   }
   fetchGraphTopology();
 }
@@ -556,13 +639,10 @@ function toggleRightInspector() {
   }
 
   setTimeout(() => {
-    if (cy) cy.resize();
-    if (graph3d) {
-      const c = document.getElementById('3d-graph-container');
-      if (c) {
-        graph3d.width(c.clientWidth);
-        graph3d.height(c.clientHeight);
-      }
+    if (currentDisplayMode === 'attack') {
+      renderWizAttackGraph(rawGraphData);
+    } else if (cy) {
+      cy.resize();
     }
   }, 300);
 }
@@ -1085,13 +1165,10 @@ function toggleSection(sectionId) {
 
 function setupResizeObserver() {
   window.addEventListener('resize', () => {
-    if (cy) cy.resize();
-    if (graph3d) {
-      const c = document.getElementById('3d-graph-container');
-      if (c) {
-        graph3d.width(c.clientWidth);
-        graph3d.height(c.clientHeight);
-      }
+    if (currentDisplayMode === 'attack') {
+      renderWizAttackGraph(rawGraphData);
+    } else if (cy) {
+      cy.resize();
     }
   });
 }

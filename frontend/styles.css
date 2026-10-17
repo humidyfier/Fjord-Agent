@@ -79,22 +79,218 @@ body {
   overflow: hidden;
 }
 
-/* Canvas Viewports */
-#canvas-viewport-2d, #canvas-viewport-3d {
+/* Header Bar single-line layout */
+.header-bar {
+  height: 54px;
+  min-height: 54px;
+  max-height: 54px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.header-bar * {
+  white-space: nowrap;
+}
+
+/* Compact KPI Strip */
+.kpi-strip {
+  height: 80px;
+  min-height: 80px;
+  max-height: 84px;
+}
+
+/* Wiz Attack Path Dotted Canvas */
+.wiz-dotted-canvas {
+  background-color: #FAF8F3;
+  background-image: radial-gradient(#D4CFC4 1.2px, transparent 1.2px);
+  background-size: 20px 20px;
+  position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+}
+
+/* SVG Bezier Layer */
+.wiz-svg-layer {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.wiz-bezier-attack {
+  fill: none;
+  stroke: #C93B2B;
+  stroke-width: 3.5px;
+  stroke-linecap: round;
+  filter: drop-shadow(0 2px 5px rgba(201, 59, 43, 0.3));
+}
+
+.wiz-bezier-dashed {
+  fill: none;
+  stroke: #7C3AED;
+  stroke-width: 2.5px;
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
+}
+
+.wiz-bezier-severed {
+  fill: none;
+  stroke: #8E8A80;
+  stroke-width: 2.5px;
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
+}
+
+/* Wiz Circular Nodes */
+.wiz-node-wrapper {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 5;
+  user-select: none;
+}
+.wiz-node-wrapper:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+  z-index: 12;
+}
+.wiz-node-wrapper.selected .wiz-node-circle {
+  box-shadow: 0 0 0 4px #2563EB, 0 8px 24px rgba(37, 99, 235, 0.4) !important;
+}
+
+.wiz-node-circle {
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background-color: #FAF8F3;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.15s ease;
+}
+
+.wiz-circle-internet {
+  width: 76px;
+  height: 76px;
+  border: 3px solid #181818;
+  background-color: #FAF8F3;
+  color: #181818;
+}
+
+.wiz-circle-ingress {
+  width: 60px;
+  height: 60px;
+  border: 2.5px solid #E87524;
+  outline: 3px solid #FEF4EC;
+  background-color: #FEF4EC;
+  color: #E87524;
+}
+
+.wiz-circle-workload {
+  width: 60px;
+  height: 60px;
+  border: 2.5px solid #3B66E4;
+  outline: 3px solid #EEF3FE;
+  background-color: #EEF3FE;
+  color: #3B66E4;
+}
+
+.wiz-circle-cve {
+  width: 56px;
+  height: 56px;
+  border: 2.5px solid #D93829;
+  outline: 3px solid #FBEAE8;
+  background-color: #FBEAE8;
+  color: #D93829;
+}
+
+.wiz-circle-identity {
+  width: 56px;
+  height: 56px;
+  border: 2.5px solid #7E42D8;
+  outline: 3px solid #F5F3FF;
+  background-color: #F5F3FF;
+  color: #7E42D8;
+}
+
+.wiz-circle-crownjewel {
+  width: 60px;
+  height: 60px;
+  border: 2.5px solid #228B5B;
+  outline: 3px solid #E6F4ED;
+  background-color: #E6F4ED;
+  color: #228B5B;
+}
+
+/* Badges on Nodes */
+.wiz-node-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #FAF8F3;
+}
+
+.wiz-gem-icon {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  background: #228B5B;
+  border-radius: 3px;
+  transform: rotate(45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FAF8F3;
+  font-size: 9px;
+  box-shadow: 0 2px 4px rgba(34, 139, 91, 0.4);
+}
+.wiz-gem-icon i {
+  transform: rotate(-45deg);
+}
+
+.wiz-severed-badge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background-color: #FAF8F3;
+  border: 1.5px solid #236B48;
+  color: #236B48;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 2px 8px rgba(35, 107, 72, 0.2);
+  z-index: 8;
+  white-space: nowrap;
 }
 
 #topology-canvas {
   width: 100%;
   height: 100%;
   background: var(--bg-surface);
-}
-
-#canvas-viewport-3d {
-  background: #0C0D0E;
 }
 
 /* KPI Card Clickable Hover */

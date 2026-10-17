@@ -105,25 +105,17 @@
       <div class="py-2 border-b border-obsidian-border">
         <div class="px-3 pb-1 text-[9px] font-mono uppercase tracking-wider text-archival-faint">Workspace Views</div>
         <nav class="space-y-0.5 text-xs font-mono">
-          <button onclick="switchView('dashboard')" id="nav-dashboard" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition nav-item-active">
-            <i class="fa-solid fa-layer-group text-wiz-emerald w-4 text-center"></i>
-            <span>DASHBOARD</span>
-          </button>
-          <button onclick="switchView('graph')" id="nav-graph" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850">
-            <i class="fa-solid fa-circle-nodes w-4 text-center"></i>
-            <span>SECURITY GRAPH</span>
-          </button>
           <button onclick="switchView('copilot')" id="nav-copilot" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850">
             <i class="fa-solid fa-robot w-4 text-center"></i>
             <span>AGENT COPILOT</span>
           </button>
+          <button onclick="switchView('dashboard')" id="nav-dashboard" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition nav-item-active">
+            <i class="fa-solid fa-layer-group text-wiz-emerald w-4 text-center"></i>
+            <span>OVERVIEW & GRAPH</span>
+          </button>
           <button onclick="switchView('connectors')" id="nav-connectors" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850">
             <i class="fa-solid fa-plug w-4 text-center"></i>
             <span>CONNECTORS & MCP</span>
-          </button>
-          <button onclick="switchView('settings')" id="nav-settings" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850">
-            <i class="fa-solid fa-sliders w-4 text-center"></i>
-            <span>SETTINGS & API</span>
           </button>
         </nav>
       </div>
@@ -203,6 +195,10 @@
           <i class="fa-solid fa-arrow-rotate-left text-[9px]"></i>
           <span>RESET WORKSPACE</span>
         </button>
+        <button onclick="switchView('settings')" id="nav-settings" class="w-full mt-1 px-2 py-1.5 rounded bg-obsidian-850 hover:bg-obsidian-800 border border-obsidian-border text-archival-cream text-[10px] font-bold transition flex items-center justify-between">
+          <span class="flex items-center space-x-1.5"><i class="fa-solid fa-gear text-archival-faint"></i><span>SETTINGS & API</span></span>
+          <i class="fa-solid fa-chevron-right text-[9px] text-archival-faint"></i>
+        </button>
       </div>
     </aside>
 
@@ -232,16 +228,6 @@
             <span>+ UPLOAD</span>
           </button>
 
-          <!-- Prod / Sandbox Diff Toggle -->
-          <div class="inline-flex rounded arch-border bg-archival-stone p-0.5 text-xs font-mono shrink-0 whitespace-nowrap">
-            <button onclick="toggleGraphView('prod')" id="btn-toggle-prod" class="px-2 py-0.5 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition whitespace-nowrap">
-              prod_cluster
-            </button>
-            <button onclick="toggleGraphView('sandbox')" id="btn-toggle-sandbox" class="px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink font-semibold transition whitespace-nowrap">
-              sandbox_sim
-            </button>
-          </div>
-
           <!-- Run Remediation Agent Button -->
           <button onclick="runRemediationPipeline()" title="Run Remediation Agent" class="px-2.5 py-1 rounded bg-obsidian-900 hover:bg-obsidian-800 text-archival-cream text-xs font-mono font-bold transition flex items-center space-x-1 shadow whitespace-nowrap shrink-0">
             <i class="fa-solid fa-bolt text-wiz-ochre text-[10px]"></i>
@@ -256,14 +242,29 @@
       </header>
 
       <!-- =============================================================== -->
-      <!-- VIEW 1: DASHBOARD (4 Sleek KPI Blocks + Wiz Attack Path Canvas)  -->
+      <!-- VIEW 1: OVERVIEW & GRAPH (3 Sleek KPI Blocks + Wiz Attack Path)  -->
       <!-- =============================================================== -->
       <div id="view-dashboard" class="flex-1 flex flex-col overflow-hidden">
         
-        <!-- 4-Block Sleek Interactive Architectural KPI Strip (Low-Profile 80px) -->
-        <div class="grid grid-cols-4 bg-archival-surface arch-border-b shrink-0 text-archival-ink select-none kpi-strip">
+        <!-- 3-Block Sleek Interactive Architectural KPI Strip (Low-Profile 80px) -->
+        <div class="grid grid-cols-3 bg-archival-surface arch-border-b shrink-0 text-archival-ink select-none kpi-strip">
           
-          <!-- KPI 1: Toxic Combinations -->
+          <!-- KPI 1: Attack Paths -->
+          <div onclick="drillDownAttackPaths()" class="kpi-card p-2.5 arch-border-r flex flex-col justify-between" title="Click to focus on shortest breach path & inspect exploit proof">
+            <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
+              <span>REACHABLE ATTACK PATHS</span>
+              <i class="fa-solid fa-route text-wiz-crimson text-xs"></i>
+            </div>
+            <div class="flex items-baseline space-x-1.5 my-0.5">
+              <span id="kpi-path-count" class="font-display font-bold text-2xl tracking-tight text-wiz-crimson">1</span>
+              <span class="text-[9px] font-mono text-archival-faint">PATH · 3 HOPS</span>
+            </div>
+            <div class="text-[9px] font-mono text-archival-muted truncate">
+              FalkorDB <code class="bg-archival-stone px-1 py-0.5 rounded text-[8px]">algo.SPpaths</code>
+            </div>
+          </div>
+
+          <!-- KPI 2: Toxic Combinations -->
           <div onclick="drillDownToxicCombinations()" class="kpi-card p-2.5 arch-border-r flex flex-col justify-between" title="Click to highlight toxic chains and inspect multi-factor risk breakdown">
             <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
               <span>TOXIC COMBINATIONS</span>
@@ -278,25 +279,10 @@
             </div>
           </div>
 
-          <!-- KPI 2: Attack Paths -->
-          <div onclick="drillDownAttackPaths()" class="kpi-card p-2.5 arch-border-r flex flex-col justify-between" title="Click to focus on shortest breach path & inspect exploit proof">
+          <!-- KPI 3: Prioritized CVEs -->
+          <div onclick="drillDownOnPathFindings()" class="kpi-card p-2.5 flex flex-col justify-between" title="Click to compare On-Path Reachable CVEs vs Filtered Noise">
             <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
-              <span>ACTIVE ATTACK PATHS</span>
-              <i class="fa-solid fa-route text-wiz-crimson text-xs"></i>
-            </div>
-            <div class="flex items-baseline space-x-1.5 my-0.5">
-              <span id="kpi-path-count" class="font-display font-bold text-2xl tracking-tight text-wiz-crimson">1</span>
-              <span class="text-[9px] font-mono text-archival-faint">PATH · 3 HOPS</span>
-            </div>
-            <div class="text-[9px] font-mono text-archival-muted truncate">
-              FalkorDB <code class="bg-archival-stone px-1 py-0.5 rounded text-[8px]">algo.SPpaths</code>
-            </div>
-          </div>
-
-          <!-- KPI 3: On-Path Findings -->
-          <div onclick="drillDownOnPathFindings()" class="kpi-card p-2.5 arch-border-r flex flex-col justify-between" title="Click to compare On-Path Reachable CVEs vs Filtered Noise">
-            <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
-              <span>ON-PATH FINDINGS</span>
+              <span>PRIORITIZED CVEs (ON-PATH vs. NOISE)</span>
               <i class="fa-solid fa-bullseye text-wiz-ochre text-xs"></i>
             </div>
             <div class="flex items-baseline space-x-1.5 my-0.5">
@@ -305,21 +291,6 @@
             </div>
             <div class="text-[9px] font-mono text-wiz-emerald truncate font-semibold">
               <i class="fa-solid fa-filter mr-1"></i>90% Noise Filtered
-            </div>
-          </div>
-
-          <!-- KPI 4: Sandbox & Solver Status -->
-          <div onclick="drillDownSandboxVerified()" class="kpi-card p-2.5 flex flex-col justify-between" title="Click to toggle sandbox_sim mode & view verification proof">
-            <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
-              <span>SANDBOX & SOLVER STATUS</span>
-              <i class="fa-solid fa-shield-halved text-wiz-emerald text-xs"></i>
-            </div>
-            <div class="flex items-baseline space-x-1.5 my-0.5">
-              <span id="kpi-sandbox-status" class="font-display font-bold text-2xl tracking-tight text-wiz-emerald">100%</span>
-              <span class="text-[9px] font-mono text-archival-faint">ELIMINATED · 11.4ms</span>
-            </div>
-            <div class="text-[9px] font-mono text-archival-muted truncate">
-              <code class="bg-archival-stone px-1 py-0.5 rounded text-[8px]">GRAPH.COPY</code> Zero Drift (PASS)
             </div>
           </div>
 
@@ -334,14 +305,15 @@
             <div class="absolute top-3.5 left-4 z-10 pointer-events-none select-none">
               <div class="text-[11px] font-mono font-bold tracking-wider uppercase text-archival-ink flex items-center space-x-2">
                 <span class="w-2 h-2 rounded-full bg-wiz-crimson animate-ping"></span>
-                <span>ATTACK PATH VISUALIZATION // CRITICAL BREACH TRAJECTORY</span>
+                <span>ATTACK PATH VISUALIZATION // DASHBOARD &amp; SECURITY GRAPH</span>
               </div>
               <div class="text-[9px] font-mono text-archival-muted">
                 Deterministic Left-to-Right Exposure Graph · FalkorDB Exploit Plane
               </div>
             </div>
+            <div id="topology-canvas" class="hidden"></div>
 
-            <!-- Floating Top-Right Controls: View Mode & Cluster Pill -->
+            <!-- Floating Top-Right Controls: View Mode & State Preview Toggle -->
             <div class="absolute top-3.5 right-4 z-10 flex items-center space-x-2">
               <div class="inline-flex rounded arch-border bg-archival-surface/90 backdrop-blur-xs p-0.5 text-[11px] font-mono shadow-xs">
                 <button onclick="setGraphDisplayMode('attack')" id="btn-mode-attack" class="px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold transition">
@@ -353,9 +325,12 @@
               </div>
 
               <div class="inline-flex rounded arch-border bg-archival-surface/90 backdrop-blur-xs p-0.5 text-[11px] font-mono shadow-xs">
-                <span id="canvas-cluster-pill" class="px-2 py-0.5 text-archival-ink font-bold">
-                  prod_cluster
-                </span>
+                <button onclick="toggleGraphView('prod')" id="btn-toggle-prod" class="px-2 py-0.5 rounded bg-archival-surface text-archival-ink font-bold shadow-xs transition whitespace-nowrap">
+                  Current Live Risk
+                </button>
+                <button onclick="toggleGraphView('sandbox')" id="btn-toggle-sandbox" class="px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink font-semibold transition whitespace-nowrap">
+                  Preview After Fix
+                </button>
               </div>
             </div>
 
@@ -399,11 +374,6 @@
             <!-- HTML Circular Nodes Overlay Layer -->
             <div id="wiz-nodes-layer" class="absolute inset-0 pointer-events-none"></div>
 
-            <!-- Full Graph Cytoscape Fallback (Hidden by default, shown when mode='full') -->
-            <div id="wiz-full-cytoscape" class="absolute inset-0 hidden pointer-events-auto bg-archival-surface">
-              <div id="topology-canvas" class="w-full h-full"></div>
-            </div>
-
           </div>
         </div>
 
@@ -419,64 +389,14 @@
             </span>
           </div>
           <div id="remediation-queue-cards" class="flex-1 p-3 overflow-y-auto custom-scroll space-y-2 text-xs font-mono">
-            <div class="p-2.5 rounded arch-border bg-archival-bg flex items-center justify-between hover:border-wiz-crimson/50 transition">
-              <div class="flex items-center space-x-3">
-                <span class="w-6 h-6 rounded bg-wiz-crimsonBg text-wiz-crimson border border-wiz-crimson/30 flex items-center justify-center font-bold text-xs">
-                  NP
-                </span>
-                <div>
-                  <div class="font-bold text-archival-ink">isolate-crown-jewel-db (NetworkPolicy)</div>
-                  <div class="text-[10px] text-archival-muted">Drop unwhitelisted ingress to crown-jewel-db:5432 · Disruption Cost: 3.0</div>
-                </div>
-              </div>
-              <div class="flex items-center space-x-2">
-                <span class="text-[10px] px-2 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald border border-wiz-emerald/30 font-bold">
-                  SEVERS ATTACK PATH
-                </span>
-                <button onclick="inspectRemediationCandidate()" class="px-2.5 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-[11px] font-bold">
-                  Inspect Diff
-                </button>
-              </div>
-            </div>
+            <div class="p-3 text-archival-muted text-[11px] font-mono">Computing optimal remediations from live graph...</div>
           </div>
         </div>
 
       </div>
 
       <!-- =============================================================== -->
-      <!-- VIEW 2: SECURITY GRAPH (Full-Screen 2D/3D Exploration)           -->
-      <!-- =============================================================== -->
-      <div id="view-graph" class="flex-1 flex flex-col overflow-hidden hidden">
-        <div class="h-9 bg-archival-stone arch-border-b px-4 flex items-center justify-between shrink-0 text-xs font-mono text-archival-muted">
-          <div class="flex items-center space-x-3">
-            <span class="font-bold text-archival-ink uppercase">FULL-SCREEN SECURITY GRAPH EXPLORER</span>
-            <span class="text-[10px] px-2 py-0.5 rounded bg-archival-surface arch-border text-archival-faint">
-              FILTER: ALL ENTITIES
-            </span>
-          </div>
-          <div class="flex items-center space-x-2">
-            <label class="flex items-center space-x-1 cursor-pointer text-[10px]">
-              <input type="checkbox" id="chk-filter-cve" checked class="rounded" onchange="filterGraphEntities()">
-              <span>CVEs</span>
-            </label>
-            <label class="flex items-center space-x-1 cursor-pointer text-[10px]">
-              <input type="checkbox" id="chk-filter-iam" checked class="rounded" onchange="filterGraphEntities()">
-              <span>RBAC/IAM</span>
-            </label>
-            <label class="flex items-center space-x-1 cursor-pointer text-[10px]">
-              <input type="checkbox" id="chk-filter-workloads" checked class="rounded" onchange="filterGraphEntities()">
-              <span>Workloads</span>
-            </label>
-          </div>
-        </div>
-        <div id="full-graph-container" class="flex-1 relative bg-archival-surface">
-          <!-- Cloned or synced view with topology canvas -->
-          <div id="full-topology-canvas" class="w-full h-full"></div>
-        </div>
-      </div>
-
-      <!-- =============================================================== -->
-      <!-- VIEW 3: AGENT COPILOT (Conversational Chatbot & FastMCP Trace)    -->
+      <!-- VIEW 2: AGENT COPILOT (Conversational Chatbot & FastMCP Trace)    -->
       <!-- =============================================================== -->
       <div id="view-copilot" class="flex-1 flex overflow-hidden hidden">
         
@@ -734,18 +654,6 @@
           </div>
         </div>
 
-        <!-- Read-Only System Prompt & Zero-Trust Invariants Audit -->
-        <div class="p-4 rounded arch-border bg-archival-surface space-y-3 font-mono text-xs">
-          <div class="flex items-center justify-between font-bold text-archival-ink">
-            <span class="flex items-center space-x-2">
-              <i class="fa-solid fa-lock text-wiz-crimson"></i>
-              <span>READ-ONLY SECURITY SYSTEM PROMPT & GUARDRAILS AUDIT</span>
-            </span>
-            <span class="text-[10px] px-2 py-0.5 rounded bg-archival-stone arch-border text-archival-muted">IMMUTABLE ARCHIVAL INVARIANT</span>
-          </div>
-          <pre id="system-prompt-display" class="p-3 rounded arch-border bg-archival-stone/40 text-[10px] text-archival-ink font-mono max-h-48 overflow-y-auto custom-scroll leading-relaxed whitespace-pre-wrap">Loading system prompt...</pre>
-        </div>
-
         <!-- Sentinel Memory Operator Vetoes Manager -->
         <div class="p-4 rounded arch-border bg-archival-surface space-y-3 font-mono text-xs">
           <div class="flex items-center justify-between font-bold text-archival-ink">
@@ -773,7 +681,7 @@
             RECORD INSPECTOR
           </span>
           <span id="inspector-entity-badge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-wiz-blueBg text-wiz-blue border border-wiz-blue/30 font-bold">
-            WORKLOAD
+            NODE
           </span>
         </div>
         <button onclick="toggleRightInspector()" class="text-archival-muted hover:text-archival-ink px-1.5 py-0.5 rounded arch-border bg-archival-surface text-xs font-mono font-bold" title="Collapse Inspector Drawer">
@@ -784,8 +692,8 @@
       <!-- Selected Entity Stamp -->
       <div class="p-3 arch-border-b bg-archival-surface/70 space-y-0.5 font-mono">
         <div class="text-[9px] text-archival-faint uppercase font-bold">ACTIVE RESOURCE</div>
-        <div id="inspector-title" class="font-display font-bold text-sm text-archival-ink truncate">api-service</div>
-        <div id="inspector-subtitle" class="text-[10px] text-archival-muted truncate">Deployment · default namespace</div>
+        <div id="inspector-title" class="font-display font-bold text-sm text-archival-ink truncate">-</div>
+        <div id="inspector-subtitle" class="text-[10px] text-archival-muted truncate">Select a node or remediation to inspect</div>
       </div>
 
       <!-- 4 Tab Selectors -->
@@ -809,48 +717,7 @@
         
         <!-- Tab 1: Vuln & Blast Radius -->
         <div id="inspector-tab-vuln" class="space-y-3">
-          
-          <!-- Attached CVEs Box -->
-          <div class="p-3 rounded arch-border bg-archival-surface space-y-2">
-            <div class="text-[10px] font-bold text-archival-faint uppercase flex justify-between">
-              <span>ATTACHED VULNERABILITIES</span>
-              <span class="text-wiz-crimson font-bold">1 CRITICAL</span>
-            </div>
-            <div class="space-y-1.5">
-              <div class="flex justify-between items-center text-[11px]">
-                <span class="font-bold text-archival-ink">CVE-2023-38606</span>
-                <span class="px-1.5 py-0.2 rounded bg-wiz-crimsonBg text-wiz-crimson text-[9px] font-bold">CVSS 9.8</span>
-              </div>
-              <p class="text-[10px] text-archival-muted leading-relaxed">
-                Remote Code Execution via unauthenticated HTTP deserialization. Active exploit in lateral chain to CrownJewel.
-              </p>
-            </div>
-          </div>
-
-          <!-- RBAC Permissions Box -->
-          <div class="p-3 rounded arch-border bg-archival-surface space-y-1.5">
-            <div class="text-[10px] font-bold text-archival-faint uppercase">RBAC & SERVICE ACCOUNT</div>
-            <div class="text-[11px] text-archival-ink font-semibold">sa: default-api-sa</div>
-            <div class="text-[10px] text-archival-muted">
-              Role: <code class="bg-archival-stone px-1 rounded">secret-reader</code> (Allowed: <code class="text-wiz-crimson">secrets/get</code>)
-            </div>
-          </div>
-
-          <!-- Network Peers (Blast Radius) Box -->
-          <div class="p-3 rounded arch-border bg-archival-surface space-y-1.5">
-            <div class="text-[10px] font-bold text-archival-faint uppercase">NETWORK REACHABILITY PEERS</div>
-            <div class="text-[10px] space-y-1">
-              <div class="flex justify-between">
-                <span>INBOUND:</span>
-                <span class="font-bold text-archival-ink">ingress-proxy:8080</span>
-              </div>
-              <div class="flex justify-between">
-                <span>OUTBOUND:</span>
-                <span class="font-bold text-wiz-crimson">crown-jewel-db:5432</span>
-              </div>
-            </div>
-          </div>
-
+          <div class="text-archival-muted text-[11px] font-mono p-2">Select a node in the graph to inspect attached CVEs, RBAC identities, and blast radius.</div>
         </div>
 
         <!-- Tab 2: Remediation YAML Patch -->
@@ -863,25 +730,7 @@
               <button onclick="validateWithKubeconform()" class="px-2 py-0.5 rounded bg-wiz-blue text-white font-bold">Validate</button>
             </div>
           </div>
-          <pre id="yaml-patch-code" class="p-3 rounded arch-border bg-archival-surface text-[10px] text-archival-ink font-mono overflow-x-auto dark-scroll leading-relaxed whitespace-pre">apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: isolate-crown-jewel-db
-  namespace: default
-spec:
-  podSelector:
-    matchLabels:
-      app: crown-jewel-db
-  policyTypes:
-  - Ingress
-  ingress:
-  - from:
-    - podSelector:
-        matchLabels:
-          app: internal-analytics
-    ports:
-    - protocol: TCP
-      port: 5432</pre>
+          <pre id="yaml-patch-code" class="p-3 rounded arch-border bg-archival-surface text-[10px] text-archival-ink font-mono overflow-x-auto dark-scroll leading-relaxed whitespace-pre">// Select a remediation candidate to inspect synthesized NetworkPolicy</pre>
           <div id="kubeconform-status-box" class="p-2 rounded arch-border bg-wiz-emeraldBg text-wiz-emerald text-[10px] font-bold hidden">
             ✓ Validated with kubeconform: Schema compliant
           </div>

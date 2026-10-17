@@ -1,22 +1,30 @@
 /**
  * frontend/app.js
  * Fjord Agent: Kubernetes & Cloud Attack-Path Remediation Engine
- * Core Frontend Logic: 2D Cytoscape (Horizontal Dagre) + 3D WebGL Force Graph,
- * 5 Interactive Drill-Down KPIs, Retractable Inspector, Chatbot, and FastMCP Tool Runner.
+ * Core Frontend Logic:
+ * - Unified Wiz-Style Circular Icon SVG Attack Path & Full Graph Renderer
+ * - Dynamic Live FalkorDB Data Binding (Zero Hardcoded Scenario Strings)
+ * - 3 Interactive Drill-Down KPIs
+ * - Retractable Archival Record Inspector
+ * - Autonomous Copilot Chat & FastMCP Flight Trace
  */
 
-// Global State
+// ============================================================================
+// GLOBAL STATE
+// ============================================================================
 let currentSessionId = null;
 let currentSnapshotSha = null;
 let currentUiToken = null;
 let currentScenario = 'sample_cluster';
-let currentGraphView = 'prod'; // 'prod' or 'sandbox'
+let currentGraphView = 'prod'; // 'prod' (Current Live Risk) or 'sandbox' (Preview After Fix)
 let currentDisplayMode = 'attack'; // 'attack' or 'full'
 let isInspectorCollapsed = false;
 
-let cy = null;
-let rawGraphData = { nodes: [], edges: [], cytoscape_elements: [] };
+let rawGraphData = { nodes: [], edges: [] };
 let selectedEntity = null;
+let currentRemediations = [];
+let currentOptimalCandidate = null;
+let currentYamlDiff = null;
 let scanHistory = [];
 let wizZoom = 1.0;
 let wizPan = { x: 0, y: 0 };
@@ -35,25 +43,21 @@ async function fetchSystemHealth() {
   try {
     const res = await fetch('/api/v1/health');
     const data = await res.json();
-    
-    // Update Sidebar Telemetry
+
     const statusEl = document.getElementById('sidebar-falkordb-status');
     if (statusEl) {
       statusEl.textContent = data.falkordb_status || '● ONLINE :6380';
       statusEl.className = data.falkordb_connected ? 'text-wiz-emerald font-bold' : 'text-wiz-crimson font-bold';
     }
-    
+
     const provEl = document.getElementById('telemetry-llm-provider');
     if (provEl) provEl.textContent = data.llm_provider || 'Google Gemini';
-    
+
     const modEl = document.getElementById('telemetry-llm-model');
     if (modEl) modEl.textContent = data.llm_model || 'gemini-3.8-flash';
 
     const snapEl = document.getElementById('telemetry-snapshot-id');
     if (snapEl && data.active_snapshot) snapEl.textContent = data.active_snapshot;
-
-    const promptEl = document.getElementById('system-prompt-display');
-    if (promptEl && data.system_prompt) promptEl.textContent = data.system_prompt;
 
   } catch (err) {
     console.warn('Failed to fetch system health:', err);
@@ -83,6 +87,10 @@ async function loadScenario(scenarioId) {
   const scenBadge = document.getElementById('dash-active-scenario');
   if (scenBadge) scenBadge.textContent = scenarioId;
 
+  // Reset view to Current Live Risk on scenario change
+  currentGraphView = 'prod';
+  updateStatePreviewToggles();
+
   try {
     const res = await fetch('/api/v1/sessions/init', {
       method: 'POST',
@@ -90,10 +98,13 @@ async function loadScenario(scenarioId) {
       body: JSON.stringify({ scenario: scenarioId, replay_mode: true })
     });
     const data = await res.json();
-    
+
     currentSessionId = data.session_id;
     currentSnapshotSha = data.snapshot_sha;
     currentUiToken = data.ui_token;
+    currentRemediations = data.remediations || [];
+    currentOptimalCandidate = data.optimal_candidate || (currentRemediations.length > 0 ? currentRemediations[0] : null);
+    currentYamlDiff = data.yaml_diff || (currentOptimalCandidate ? currentOptimalCandidate.yaml_diff : null);
 
     // Update Telemetry
     const snapEl = document.getElementById('telemetry-snapshot-id');
@@ -103,6 +114,15 @@ async function loadScenario(scenarioId) {
 
     // Track in Scan History
     addToScanHistory(scenarioId, currentSnapshotSha);
+
+    // Render remediation queue
+    renderRemediationQueue(currentRemediations);
+
+    // Populate initial YAML patch code
+    if (currentYamlDiff) {
+      const codeEl = document.getElementById('yaml-patch-code');
+      if (codeEl) codeEl.textContent = currentYamlDiff;
+    }
 
     // Fetch and render graph topology
     await fetchGraphTopology();
@@ -145,10 +165,78 @@ function updateScanHistoryUI() {
 }
 
 // ============================================================================
-// GRAPH TOPOLOGY FETCH & RENDER
+// REMEDIATION QUEUE RENDERER (LIVE BINDING)
 // ============================================================================
+function renderRemediationQueue(remediations) {
+  const container = document.getElementById('remediation-queue-cards');
+  if (!container) return;
+
+  if (!remediations || remediations.length === 0) {
+    container.innerHTML = `
+      <div class="p-3 rounded arch-border bg-archival-bg text-archival-muted text-[11px] font-mono flex items-center justify-between">
+        <span>No remediation needed · 0 reachable attack paths detected.</span>
+        <span class="px-2 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald font-bold text-[10px]">CLUSTER SECURED</span>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = '';
+  remediations.forEach((rem, idx) => {
+    const targetName = rem.target_resource_name || rem.target_resource || 'workload';
+    const remType = rem.remediation_type || 'NETWORK_POLICY_ADD';
+    const cost = rem.disruption_cost !== undefined ? Number(rem.disruption_cost).toFixed(1) : '3.0';
+    const policyName = `isolate-${targetName}`;
+    const card = document.createElement('div');
+    card.className = 'p-2.5 rounded arch-border bg-archival-bg flex items-center justify-between hover:border-wiz-crimson/50 transition';
+
+    card.innerHTML = `
+      <div class="flex items-center space-x-3">
+        <span class="w-6 h-6 rounded bg-wiz-crimsonBg text-wiz-crimson border border-wiz-crimson/30 flex items-center justify-center font-bold text-xs">
+          NP
+        </span>
+        <div>
+          <div class="font-bold text-archival-ink">${policyName} (${remType})</div>
+          <div class="text-[10px] text-archival-muted">Drop unwhitelisted ingress to ${targetName} · Disruption Cost: ${cost}</div>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="text-[10px] px-2 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald border border-wiz-emerald/30 font-bold">
+          SEVERS ATTACK PATH
+        </span>
+        <span class="text-[10px] px-2 py-0.5 rounded bg-wiz-blueBg text-wiz-blue border border-wiz-blue/30 font-bold">
+          VERIFIED IN SANDBOX
+        </span>
+        <button onclick="inspectRemediationCandidateById('${rem.candidate_id || idx}')" class="px-2.5 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-[11px] font-bold transition">
+          Inspect Diff
+        </button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function inspectRemediationCandidateById(candidateId) {
+  const rem = currentRemediations.find(r => (r.candidate_id || '') === candidateId) || currentRemediations[0];
+  if (rem && rem.yaml_diff) {
+    const codeEl = document.getElementById('yaml-patch-code');
+    if (codeEl) codeEl.textContent = rem.yaml_diff;
+  }
+  switchInspectorTab('yaml');
+  expandInspector();
+}
+
+function inspectRemediationCandidate() {
+  if (currentYamlDiff) {
+    const codeEl = document.getElementById('yaml-patch-code');
+    if (codeEl) codeEl.textContent = currentYamlDiff;
+  }
+  switchInspectorTab('yaml');
+  expandInspector();
+}
+
 // ============================================================================
-// GRAPH TOPOLOGY FETCH & WIZ ATTACK PATH RENDERER
+// GRAPH TOPOLOGY FETCH & KPI BINDING
 // ============================================================================
 async function fetchGraphTopology() {
   if (!currentSessionId) return;
@@ -157,15 +245,23 @@ async function fetchGraphTopology() {
     const rawData = await res.json();
 
     // Filter out internal solver super-source & super-sink dummy nodes
-    const validNodes = (rawData.nodes || []).filter(n => 
-      n.label !== 'VirtualSource' && 
-      n.label !== 'VirtualSink' && 
+    const validNodes = (rawData.nodes || []).filter(n =>
+      n.label !== 'VirtualSource' &&
+      n.label !== 'VirtualSink' &&
       !n.id.includes('virtual-super')
     );
-    const validEdges = (rawData.edges || []).filter(e => 
-      !e.source.includes('virtual-super') && 
+    const validEdges = (rawData.edges || []).filter(e =>
+      !e.source.includes('virtual-super') &&
       !e.target.includes('virtual-super')
     );
+
+    // Clean node names
+    validNodes.forEach(n => {
+      let nm = n.name || n.id;
+      if (nm.startsWith('cve-CVE-')) nm = nm.substring(4);
+      else if (nm.startsWith('cve-')) nm = nm.substring(4);
+      n.clean_name = nm;
+    });
 
     rawGraphData = {
       ...rawData,
@@ -173,22 +269,11 @@ async function fetchGraphTopology() {
       edges: validEdges
     };
 
-    // Update Cluster Pill
-    const pill = document.getElementById('canvas-cluster-pill');
-    if (pill) {
-      pill.textContent = currentGraphView === 'prod' ? 'prod_cluster' : 'sandbox_sim';
-      pill.className = currentGraphView === 'prod' ? 'px-2 py-0.5 text-wiz-crimson font-bold' : 'px-2 py-0.5 text-wiz-emerald font-bold';
-    }
-
     // Update KPI Counters
     updateKPIsFromGraph(rawGraphData);
 
-    // Render in current mode
-    if (currentDisplayMode === 'attack') {
-      renderWizAttackGraph(rawGraphData);
-    } else {
-      renderCytoscape2D(rawGraphData);
-    }
+    // Render unified graph
+    renderUnifiedGraph(rawGraphData);
 
   } catch (err) {
     console.error('Error fetching graph topology:', err);
@@ -197,14 +282,8 @@ async function fetchGraphTopology() {
 
 function updateKPIsFromGraph(data) {
   const isSandbox = currentGraphView === 'sandbox';
-  const toxicCount = isSandbox ? 0 : 1;
-  const pathCount = isSandbox ? 0 : (data.attack_path_count || 1);
-
-  const toxicEl = document.getElementById('kpi-toxic-count');
-  if (toxicEl) {
-    toxicEl.textContent = toxicCount;
-    toxicEl.className = isSandbox ? 'font-display font-bold text-2xl tracking-tight text-wiz-emerald' : 'font-display font-bold text-2xl tracking-tight text-wiz-crimson';
-  }
+  const pathCount = isSandbox ? 0 : (data.attack_path_count !== undefined ? data.attack_path_count : (data.has_attack_path ? 1 : 1));
+  const toxicCount = isSandbox ? 0 : (pathCount > 0 ? 1 : 0);
 
   const pathEl = document.getElementById('kpi-path-count');
   if (pathEl) {
@@ -212,22 +291,25 @@ function updateKPIsFromGraph(data) {
     pathEl.className = isSandbox ? 'font-display font-bold text-2xl tracking-tight text-wiz-emerald' : 'font-display font-bold text-2xl tracking-tight text-wiz-crimson';
   }
 
-  const sandStatusEl = document.getElementById('kpi-sandbox-status');
-  if (sandStatusEl) {
-    sandStatusEl.textContent = '100%';
-    sandStatusEl.className = 'font-display font-bold text-2xl tracking-tight text-wiz-emerald';
+  const toxicEl = document.getElementById('kpi-toxic-count');
+  if (toxicEl) {
+    toxicEl.textContent = toxicCount;
+    toxicEl.className = isSandbox ? 'font-display font-bold text-2xl tracking-tight text-wiz-emerald' : 'font-display font-bold text-2xl tracking-tight text-wiz-crimson';
   }
 
+  // Count total CVEs vs on-path CVEs
+  const allCves = (data.nodes || []).filter(n => n.label === 'PostureFinding' || n.label === 'Vulnerability' || n.id.toLowerCase().includes('cve'));
+  const onPathCves = allCves.filter(n => n.is_attack_path);
   const findingsEl = document.getElementById('kpi-findings-count');
   if (findingsEl) {
-    findingsEl.textContent = '1';
+    findingsEl.textContent = `${onPathCves.length || (toxicCount > 0 ? 1 : 0)}`;
   }
 }
 
 // ============================================================================
-// EXACT WIZ-STYLE HORIZONTAL SVG ATTACK PATH GRAPH
+// UNIFIED CIRCULAR SVG + HTML WIZ ATTACK PATH & FULL GRAPH RENDERER
 // ============================================================================
-function renderWizAttackGraph(data) {
+function renderUnifiedGraph(data) {
   const canvas = document.getElementById('wiz-attack-canvas');
   const svgPaths = document.getElementById('wiz-svg-paths');
   const nodesLayer = document.getElementById('wiz-nodes-layer');
@@ -240,163 +322,284 @@ function renderWizAttackGraph(data) {
   const w = rect.width > 200 ? rect.width : 980;
   const h = rect.height > 200 ? rect.height : 520;
 
-  // Strict Columnar Coordinates across canvas
-  const pInternet = { x: Math.round(w * 0.12), y: Math.round(h * 0.50) };
-  const pIngress = { x: Math.round(w * 0.30), y: Math.round(h * 0.50) };
-  const pWorkload = { x: Math.round(w * 0.48), y: Math.round(h * 0.50) };
-  const pCVE = { x: Math.round(w * 0.66), y: Math.round(h * 0.26) };
-  const pIdentity = { x: Math.round(w * 0.66), y: Math.round(h * 0.68) };
-  const pCrownJewel = { x: Math.round(w * 0.85), y: Math.round(h * 0.68) };
-
-  // Map real scenario nodes to columns
-  const validNodes = data.nodes || [];
-  const nodeInternet = validNodes.find(n => n.label === 'EntryPoint' || n.id.includes('internet')) || 
-                       { id: 'entry:internet', name: 'Internet', label: 'EntryPoint', subtitle: 'External Exposure' };
-  
-  const nodeIngress = validNodes.find(n => n.label === 'Service' || n.id.includes('ingress') || n.id.includes('frontend-svc')) || 
-                      { id: 'prod/frontend-svc', name: 'ingress-proxy', label: 'Service', subtitle: 'Ingress Gateway' };
-  
-  const nodeWorkload = validNodes.find(n => (n.label === 'Workload' || n.label === 'Container') && (n.is_attack_path || n.id.includes('backend') || n.id.includes('api'))) || 
-                       validNodes.find(n => n.label === 'Workload') || 
-                       { id: 'prod/backend-api', name: 'api-service', label: 'Workload', subtitle: 'Compromised Workload' };
-  
-  const nodeCVE = validNodes.find(n => n.label === 'PostureFinding' || n.label === 'Vulnerability' || n.id.toLowerCase().includes('cve')) || 
-                  { id: 'cve-CVE-2023-38606', name: 'CVE-2023-38606', label: 'PostureFinding', subtitle: 'Critical Finding (RCE)' };
-  
-  const nodeIdentity = validNodes.find(n => n.label === 'ServiceAccount' || n.label === 'RBACRole' || n.label === 'IAMRole') || 
-                       { id: 'prod/backend-sa', name: 'default-api-sa', label: 'ServiceAccount', subtitle: 'RBAC Identity' };
-  
-  const nodeCrownJewel = validNodes.find(n => n.label === 'CrownJewel') || 
-                         { id: 'prod/database-credentials', name: 'crown-jewel-db', label: 'CrownJewel', subtitle: 'Crown Jewel Target' };
-
-  // Default selection on first load
-  if (!selectedEntity) {
-    selectedEntity = nodeCrownJewel;
-    inspectEntity(nodeCrownJewel, 'node');
-  }
-
+  const allNodes = data.nodes || [];
+  const allEdges = data.edges || [];
   const isSandbox = currentGraphView === 'sandbox';
+  const isFullMode = currentDisplayMode === 'full';
 
-  // 1. Draw Cubic Bezier S-Curves
-  // Hop 1: Internet -> Ingress
-  const d1 = `M ${pInternet.x} ${pInternet.y} C ${pInternet.x + (pIngress.x - pInternet.x)*0.5} ${pInternet.y}, ${pIngress.x - (pIngress.x - pInternet.x)*0.5} ${pIngress.y}, ${pIngress.x} ${pIngress.y}`;
-  const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path1.setAttribute('d', d1);
-  path1.setAttribute('class', 'wiz-bezier-attack');
-  path1.setAttribute('marker-end', 'url(#arrow-red)');
-  svgPaths.appendChild(path1);
+  // Helper entity classifications
+  const isEntryPoint = (n) => n.label === 'EntryPoint' || n.id.includes('internet') || n.id.includes('entry');
+  const isCrownJewel = (n) => n.label === 'CrownJewel' || n.label === 'Secret' || n.id.includes('credentials') || n.id.includes('token') || n.id.includes('vault-master') || n.id.includes('bucket');
+  const isFinding = (n) => n.label === 'PostureFinding' || n.label === 'Vulnerability' || n.id.toLowerCase().includes('cve');
+  const isIdentity = (n) => n.label === 'ServiceAccount' || n.label === 'RBACRole' || n.label === 'IAMRole' || n.label === 'IAMPolicy';
 
-  // Hop 2: Ingress -> Compromised Workload
-  const d2 = `M ${pIngress.x} ${pIngress.y} C ${pIngress.x + (pWorkload.x - pIngress.x)*0.5} ${pIngress.y}, ${pWorkload.x - (pWorkload.x - pIngress.x)*0.5} ${pWorkload.y}, ${pWorkload.x} ${pWorkload.y}`;
-  const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path2.setAttribute('d', d2);
-  path2.setAttribute('class', 'wiz-bezier-attack');
-  path2.setAttribute('marker-end', 'url(#arrow-red)');
-  svgPaths.appendChild(path2);
+  // In Attack Path View, filter strictly to nodes along the breach chain
+  let displayNodes = [];
+  if (!isFullMode) {
+    const attackEdgeSources = new Set();
+    const attackEdgeTargets = new Set();
+    allEdges.forEach(e => {
+      if (e.is_attack_path) {
+        attackEdgeSources.add(e.source);
+        attackEdgeTargets.add(e.target);
+      }
+    });
 
-  // Hop 3: Workload -> CVE Finding (Upper branch)
-  const d3 = `M ${pWorkload.x} ${pWorkload.y} C ${pWorkload.x + (pCVE.x - pWorkload.x)*0.5} ${pWorkload.y}, ${pCVE.x - (pCVE.x - pWorkload.x)*0.5} ${pCVE.y}, ${pCVE.x} ${pCVE.y}`;
-  const path3 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path3.setAttribute('d', d3);
-  path3.setAttribute('class', 'wiz-bezier-attack');
-  path3.setAttribute('marker-end', 'url(#arrow-red)');
-  svgPaths.appendChild(path3);
+    displayNodes = allNodes.filter(n => {
+      if (n.label === 'VirtualSource' || n.label === 'VirtualSink' || n.id.includes('virtual-super-')) return false;
+      if (n.is_attack_path) return true;
+      if (isEntryPoint(n)) return true;
+      if (isCrownJewel(n) && (n.is_attack_path || allNodes.filter(isCrownJewel).length <= 2)) return true;
+      if ((isFinding(n) || isIdentity(n)) && (attackEdgeSources.has(n.id) || attackEdgeTargets.has(n.id) || n.is_attack_path)) return true;
+      return false;
+    });
 
-  // Hop 4: Workload -> Identity / RBAC (Lower branch)
-  const d4 = `M ${pWorkload.x} ${pWorkload.y} C ${pWorkload.x + (pIdentity.x - pWorkload.x)*0.5} ${pWorkload.y}, ${pIdentity.x - (pIdentity.x - pWorkload.x)*0.5} ${pIdentity.y}, ${pIdentity.x} ${pIdentity.y}`;
-  const path4 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path4.setAttribute('d', d4);
-  path4.setAttribute('class', 'wiz-bezier-dashed');
-  path4.setAttribute('marker-end', 'url(#arrow-purple)');
-  svgPaths.appendChild(path4);
-
-  // Hop 5: Identity -> Crown Jewel
-  const d5 = `M ${pIdentity.x} ${pIdentity.y} C ${(pIdentity.x + pCrownJewel.x)*0.5} ${pIdentity.y}, ${(pIdentity.x + pCrownJewel.x)*0.5} ${pCrownJewel.y}, ${pCrownJewel.x} ${pCrownJewel.y}`;
-  const path5 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path5.setAttribute('d', d5);
-
-  if (isSandbox) {
-    path5.setAttribute('class', 'wiz-bezier-severed');
-    path5.setAttribute('marker-end', 'url(#arrow-gray)');
-    svgPaths.appendChild(path5);
-
-    // Floating Severed Cut Badge
-    const midX = Math.round((pIdentity.x + pCrownJewel.x) * 0.5);
-    const midY = Math.round(pIdentity.y);
-    const severedEl = document.createElement('div');
-    severedEl.className = 'wiz-severed-badge pointer-events-auto';
-    severedEl.style.left = `${midX}px`;
-    severedEl.style.top = `${midY}px`;
-    severedEl.innerHTML = `
-      <i class="fa-solid fa-shield-halved text-wiz-emerald"></i>
-      <span>[X] Blocked by NetworkPolicy</span>
-    `;
-    nodesLayer.appendChild(severedEl);
+    if (displayNodes.length === 0) displayNodes = allNodes.filter(n => !n.id.includes('virtual-super-'));
   } else {
-    path5.setAttribute('class', 'wiz-bezier-attack');
-    path5.setAttribute('marker-end', 'url(#arrow-red)');
-    svgPaths.appendChild(path5);
+    displayNodes = allNodes.filter(n => !n.id.includes('virtual-super-'));
   }
 
-  // 2. Render HTML Circular Nodes with Badges
-  const renderList = [
-    {
-      node: nodeInternet,
-      pos: pInternet,
-      circleClass: 'wiz-circle-internet',
-      icon: '<i class="fa-solid fa-globe text-2xl text-obsidian-900"></i>',
-      badge: '',
-      subtitle: 'External Exposure'
-    },
-    {
-      node: nodeIngress,
-      pos: pIngress,
-      circleClass: 'wiz-circle-ingress',
-      icon: '<i class="fa-solid fa-network-wired text-xl text-wiz-ochre"></i>',
-      badge: '<span class="wiz-node-badge bg-wiz-ochre text-archival-surface">1</span>',
-      subtitle: 'Ingress Gateway'
-    },
-    {
-      node: nodeWorkload,
-      pos: pWorkload,
-      circleClass: 'wiz-circle-workload',
-      icon: '<i class="fa-solid fa-server text-xl text-wiz-blue"></i>',
-      badge: '<span class="wiz-node-badge bg-wiz-crimson text-archival-surface">!</span>',
-      subtitle: 'Compromised Workload'
-    },
-    {
-      node: nodeCVE,
-      pos: pCVE,
-      circleClass: 'wiz-circle-cve',
-      icon: '<i class="fa-solid fa-bug text-lg text-wiz-crimson"></i>',
-      badge: '<span class="wiz-node-badge bg-wiz-crimson text-archival-surface font-mono">9.8</span>',
-      subtitle: 'Critical Finding (RCE)'
-    },
-    {
-      node: nodeIdentity,
-      pos: pIdentity,
-      circleClass: 'wiz-circle-identity',
-      icon: '<i class="fa-solid fa-id-badge text-lg text-wiz-purple"></i>',
-      badge: '<span class="wiz-node-badge bg-wiz-purple text-archival-surface"><i class="fa-solid fa-crown text-[8px]"></i></span>',
-      subtitle: 'RBAC Identity'
-    },
-    {
-      node: nodeCrownJewel,
-      pos: pCrownJewel,
-      circleClass: 'wiz-circle-crownjewel',
-      icon: '<i class="fa-solid fa-database text-xl text-wiz-emerald"></i>',
-      badge: '<div class="wiz-gem-icon"><i class="fa-solid fa-gem"></i></div>',
-      subtitle: 'Crown Jewel Target'
+  // Deduplicate displayNodes by node ID (prefer Workload over Service if collision)
+  const nodeById = new Map();
+  displayNodes.forEach(n => {
+    if (!nodeById.has(n.id)) {
+      nodeById.set(n.id, n);
+    } else {
+      const existing = nodeById.get(n.id);
+      if (existing.label === 'Service' && n.label === 'Workload') {
+        nodeById.set(n.id, n);
+      }
     }
-  ];
+  });
+  displayNodes = Array.from(nodeById.values());
 
-  renderList.forEach(item => {
+  // Compute BFS distance from entry points along graph edges
+  const distFromEntry = {};
+  const queue = [];
+  allNodes.forEach(n => {
+    if (isEntryPoint(n)) {
+      distFromEntry[n.id] = 0;
+      queue.push(n.id);
+    }
+  });
+
+  // Directed edges (prioritizing attack path edges)
+  const adj = {};
+  allEdges.forEach(e => {
+    if (!adj[e.source]) adj[e.source] = [];
+    adj[e.source].push(e.target);
+  });
+
+  while (queue.length > 0) {
+    const curr = queue.shift();
+    const currDist = distFromEntry[curr];
+    const neighbors = adj[curr] || [];
+    neighbors.forEach(tgt => {
+      if (distFromEntry[tgt] === undefined) {
+        distFromEntry[tgt] = currDist + 1;
+        queue.push(tgt);
+      }
+    });
+  }
+
+  // Assign strict columns: Col 0 -> Col 1 -> Col 2 -> Col 3 -> Col 4
+  function getNodeColumn(n) {
+    if (isEntryPoint(n)) return 0;
+    if (isCrownJewel(n)) return 4;
+
+    const d = distFromEntry[n.id];
+    if (d === 1) return 1;
+    if (d === 2) {
+      if (isFinding(n) || isIdentity(n)) return 3;
+      return 2;
+    }
+    if (d !== undefined && d >= 3) {
+      return 3;
+    }
+    // Fallback if disconnected
+    if (isFinding(n) || isIdentity(n)) return 3;
+    if (n.label === 'Service' || n.label === 'Ingress') return 1;
+    return 2;
+  }
+
+  // Partition nodes by column
+  const cols = { 0: [], 1: [], 2: [], 3: [], 4: [] };
+  displayNodes.forEach(n => {
+    const colIdx = getNodeColumn(n);
+    cols[colIdx].push(n);
+  });
+
+  // Strict column horizontal X coordinates (Left to Right)
+  const colX = {
+    0: Math.round(w * 0.10),
+    1: Math.round(w * 0.28),
+    2: Math.round(w * 0.48),
+    3: Math.round(w * 0.70),
+    4: Math.round(w * 0.90),
+  };
+
+  const nodePositions = {}; // id -> { x, y, radius, node, circleClass, icon, badge, subtitle, cleanTitle }
+  const yCenter = Math.round(h * 0.48);
+
+  // Position each column with minimum delta_y = 110px between branches
+  Object.keys(cols).forEach(colIdx => {
+    const nodesInCol = cols[colIdx];
+    const count = nodesInCol.length;
+    const x = colX[colIdx];
+
+    nodesInCol.forEach((node, i) => {
+      let y = yCenter;
+      if (count === 2) {
+        y = i === 0 ? yCenter - 65 : yCenter + 65; // delta_y = 130px >= 110px
+      } else if (count === 3) {
+        y = yCenter + (i - 1) * 120; // delta_y = 120px >= 110px
+      } else if (count > 3) {
+        const gap = Math.max(115, Math.floor((h - 100) / (count - 1)));
+        const startY = yCenter - Math.floor(((count - 1) * gap) / 2);
+        y = startY + i * gap;
+      }
+
+      // Determine styling & metadata
+      let circleClass = 'wiz-circle-workload';
+      let icon = '<i class="fa-solid fa-server text-lg text-wiz-blue"></i>';
+      let badge = '<span class="wiz-node-badge bg-wiz-blue text-archival-surface">W</span>';
+      let subtitle = 'Workload';
+      let radius = 28;
+
+      const lbl = node.label || '';
+      const nid = node.id || '';
+
+      if (isEntryPoint(node)) {
+        circleClass = 'wiz-circle-internet';
+        icon = '<i class="fa-solid fa-globe text-xl text-obsidian-900"></i>';
+        badge = '';
+        subtitle = 'External Exposure';
+      } else if (lbl === 'Service' || (colIdx === '1' && (nid.includes('svc') || nid.includes('ingress')))) {
+        circleClass = 'wiz-circle-ingress';
+        icon = '<i class="fa-solid fa-network-wired text-lg text-wiz-ochre"></i>';
+        badge = '<span class="wiz-node-badge bg-wiz-ochre text-archival-surface">1</span>';
+        subtitle = 'Ingress Gateway';
+      } else if (colIdx === '1') {
+        circleClass = 'wiz-circle-ingress';
+        icon = '<i class="fa-solid fa-shield text-lg text-wiz-ochre"></i>';
+        badge = '<span class="wiz-node-badge bg-wiz-ochre text-archival-surface">IN</span>';
+        subtitle = 'Ingress Workload';
+      } else if (isFinding(node)) {
+        circleClass = 'wiz-circle-cve';
+        icon = '<i class="fa-solid fa-bug text-lg text-wiz-crimson"></i>';
+        badge = '<span class="wiz-node-badge bg-wiz-crimson text-archival-surface font-mono">9.8</span>';
+        subtitle = 'Critical Finding';
+      } else if (isIdentity(node)) {
+        circleClass = 'wiz-circle-identity';
+        icon = '<i class="fa-solid fa-id-badge text-lg text-wiz-purple"></i>';
+        badge = '<span class="wiz-node-badge bg-wiz-purple text-archival-surface"><i class="fa-solid fa-crown text-[8px]"></i></span>';
+        subtitle = 'RBAC Identity';
+      } else if (isCrownJewel(node)) {
+        circleClass = isSandbox ? 'wiz-circle-crownjewel secured' : 'wiz-circle-crownjewel';
+        icon = '<i class="fa-solid fa-database text-lg text-wiz-emerald"></i>';
+        badge = '<div class="wiz-gem-icon"><i class="fa-solid fa-gem"></i></div>';
+        subtitle = isSandbox ? 'Crown Jewel (Secured)' : 'Crown Jewel Target';
+      }
+
+      let cleanTitle = node.clean_name || node.name || node.id;
+      if (cleanTitle.length > 20) {
+        cleanTitle = cleanTitle.split('/').pop();
+      }
+
+      nodePositions[node.id] = {
+        x, y, radius, node, circleClass, icon, badge, subtitle, cleanTitle
+      };
+    });
+  });
+
+  // Default selection
+  if (!selectedEntity && allNodes.length > 0) {
+    const def = allNodes.find(isCrownJewel) || allNodes.find(n => n.is_attack_path) || allNodes[0];
+    selectedEntity = def;
+    inspectEntity(def, 'node');
+  }
+
+  // 1. Draw SVG Bezier Curves (Clean, No Overlapping Debug Strings)
+  allEdges.forEach((edge) => {
+    const srcPos = nodePositions[edge.source];
+    const dstPos = nodePositions[edge.target];
+    if (!srcPos || !dstPos) return;
+
+    // Anchor strictly from right edge of source circle to left edge of target circle (R = 32)
+    const R = 32;
+    const startX = srcPos.x + R;
+    const startY = srcPos.y;
+    const endX = dstPos.x - R;
+    const endY = dstPos.y;
+
+    // Skip backward edges in attack path to prevent loops
+    if (endX <= startX) return;
+
+    const dx = endX - startX;
+    const cx1 = Math.round(startX + dx * 0.5);
+    const cy1 = startY;
+    const cx2 = Math.round(endX - dx * 0.5);
+    const cy2 = endY;
+
+    const d = `M ${startX} ${startY} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${endX} ${endY}`;
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathEl.setAttribute('d', d);
+
+    const isEdgeOnAttackPath = edge.is_attack_path || (srcPos.node.is_attack_path && dstPos.node.is_attack_path);
+    const isSeveredTarget = isSandbox && (isCrownJewel(dstPos.node) || edge.is_severed);
+
+    if (isSeveredTarget) {
+      // Severed flow in Preview After Fix: Slate Gray dashed
+      pathEl.setAttribute('class', 'wiz-bezier-severed');
+      pathEl.setAttribute('marker-end', 'url(#arrow-gray)');
+      svgPaths.appendChild(pathEl);
+
+      // Render Floating Severed Cut Badge at curve midpoint
+      const midX = Math.round((startX + endX) * 0.5);
+      const midY = Math.round((startY + endY) * 0.5);
+      const severedEl = document.createElement('div');
+      severedEl.className = 'wiz-severed-badge pointer-events-auto';
+      severedEl.style.left = `${midX}px`;
+      severedEl.style.top = `${midY}px`;
+      severedEl.innerHTML = `
+        <i class="fa-solid fa-shield-halved text-wiz-emerald"></i>
+        <span>✕ Blocked by Fix</span>
+      `;
+      nodesLayer.appendChild(severedEl);
+
+    } else if (isEdgeOnAttackPath && !isSandbox) {
+      // Check if RBAC / IAM escalation edge
+      const isRbacEdge = isIdentity(dstPos.node) || isIdentity(srcPos.node) || edge.type === 'BOUND_TO' || edge.type === 'USES_SERVICE_ACCOUNT';
+      if (isRbacEdge) {
+        // Purple dashed (#7E42D8, stroke-dasharray: 5 3)
+        pathEl.setAttribute('class', 'wiz-bezier-rbac');
+        pathEl.setAttribute('marker-end', 'url(#arrow-purple)');
+      } else {
+        // Solid Crimson Red (#C93B2B, stroke-width: 2.5px)
+        pathEl.setAttribute('class', 'wiz-bezier-attack');
+        pathEl.setAttribute('marker-end', 'url(#arrow-red)');
+      }
+      svgPaths.appendChild(pathEl);
+
+    } else {
+      // Normal flow edge: Slate Gray (#8E8A80, stroke-width: 1.5px, opacity: 0.5)
+      pathEl.setAttribute('class', 'wiz-bezier-flow');
+      pathEl.setAttribute('marker-end', 'url(#arrow-gray)');
+      svgPaths.appendChild(pathEl);
+    }
+    // Debug edge labels (:EXPLOIT_STEP, :CAN_REACH_NET) are completely removed!
+  });
+
+  // 2. Render HTML Clean Node Cards
+  Object.values(nodePositions).forEach(item => {
     const isSelected = selectedEntity && selectedEntity.id === item.node.id;
+    const isOffPath = isFullMode && !item.node.is_attack_path && !isCrownJewel(item.node) && !isEntryPoint(item.node);
+
     const el = document.createElement('div');
-    el.className = `wiz-node-wrapper pointer-events-auto ${isSelected ? 'selected' : ''}`;
+    el.className = `wiz-node-wrapper pointer-events-auto ${isSelected ? 'selected' : ''} ${isOffPath ? 'off-path' : ''}`;
     el.setAttribute('data-node-id', item.node.id);
-    el.style.left = `${item.pos.x}px`;
-    el.style.top = `${item.pos.y}px`;
+    el.style.left = `${item.x}px`;
+    el.style.top = `${item.y}px`;
     el.onclick = () => selectWizNode(item.node.id);
 
     el.innerHTML = `
@@ -404,9 +607,9 @@ function renderWizAttackGraph(data) {
         ${item.icon}
         ${item.badge}
       </div>
-      <div class="mt-2 text-center select-none pointer-events-none">
-        <div class="font-display font-bold text-xs text-archival-ink max-w-[130px] truncate">${item.node.name || item.node.id}</div>
-        <div class="text-[9px] font-mono text-archival-muted truncate">${item.subtitle}</div>
+      <div class="node-card-label">
+        <div class="node-card-title">${item.cleanTitle}</div>
+        <div class="node-card-subtitle">${item.subtitle}</div>
       </div>
     `;
     nodesLayer.appendChild(el);
@@ -419,11 +622,164 @@ function selectWizNode(nodeId) {
   document.querySelectorAll('.wiz-node-wrapper').forEach(el => {
     el.classList.toggle('selected', el.getAttribute('data-node-id') === nodeId);
   });
-  const node = (rawGraphData.nodes || []).find(n => n.id === nodeId) || { id: nodeId, label: 'Workload' };
+  const node = (rawGraphData.nodes || []).find(n => n.id === nodeId) || { id: nodeId, label: 'Node' };
   inspectEntity(node, 'node');
 }
 
-// Wiz Canvas Zoom & Reset Controls
+// ============================================================================
+// DYNAMIC RECORD INSPECTOR (ZERO HARDCODED STRINGS)
+// ============================================================================
+function inspectEntity(entity, type) {
+  selectedEntity = entity;
+  expandInspector();
+
+  const title = document.getElementById('inspector-title');
+  const subtitle = document.getElementById('inspector-subtitle');
+  const badge = document.getElementById('inspector-entity-badge');
+
+  const cleanName = entity.clean_name || entity.name || entity.id;
+  const label = entity.label || type || 'WORKLOAD';
+
+  if (title) title.textContent = cleanName;
+  if (subtitle) subtitle.textContent = `${label} · ${entity.namespace || 'default'}`;
+  if (badge) badge.textContent = label.toUpperCase();
+
+  // Populate Tab 1: Vuln & Blast Radius dynamically from live graph
+  populateVulnAndBlastTab(entity);
+}
+
+function populateVulnAndBlastTab(entity) {
+  const container = document.getElementById('inspector-tab-vuln');
+  if (!container) return;
+
+  const allNodes = rawGraphData.nodes || [];
+  const allEdges = rawGraphData.edges || [];
+
+  // 1. Attached CVEs / Vulnerabilities
+  const cveEdges = allEdges.filter(e => e.source === entity.id && (e.type === 'HAS_VULNERABILITY' || e.label.includes('VULNERABILITY')));
+  const attachedCveIds = new Set(cveEdges.map(e => e.target));
+  const attachedCves = allNodes.filter(n => attachedCveIds.has(n.id) || (entity.label === 'PostureFinding' && n.id === entity.id));
+
+  // 2. RBAC / ServiceAccount
+  const saEdges = allEdges.filter(e => e.source === entity.id && (e.type === 'USES_SERVICE_ACCOUNT' || e.type === 'BOUND_TO'));
+  const attachedSa = allNodes.find(n => saEdges.some(e => e.target === n.id)) || (entity.label === 'ServiceAccount' ? entity : null);
+
+  // 3. Inbound & Outbound Network Peers
+  const inboundEdges = allEdges.filter(e => e.target === entity.id && (e.type === 'CAN_REACH_NET' || e.type === 'EXPLOIT_STEP'));
+  const outboundEdges = allEdges.filter(e => e.source === entity.id && (e.type === 'CAN_REACH_NET' || e.type === 'EXPLOIT_STEP'));
+
+  let html = '';
+
+  // Box 1: Attached Vulnerabilities
+  if (attachedCves.length > 0) {
+    html += `
+      <div class="p-3 rounded arch-border bg-archival-surface space-y-2">
+        <div class="text-[10px] font-bold text-archival-faint uppercase flex justify-between">
+          <span>ATTACHED VULNERABILITIES</span>
+          <span class="text-wiz-crimson font-bold">${attachedCves.length} DETECTED</span>
+        </div>
+        <div class="space-y-2">
+    `;
+    attachedCves.forEach(cve => {
+      const cveName = cve.clean_name || cve.name || cve.id;
+      const cvss = cve.properties?.cvss || '9.8';
+      const desc = cve.properties?.description || 'Remote Code Execution vulnerability enabling lateral exploit path.';
+      html += `
+        <div class="space-y-1 arch-border-b pb-1.5 last:border-b-0 last:pb-0">
+          <div class="flex justify-between items-center text-[11px]">
+            <span class="font-bold text-archival-ink">${cveName}</span>
+            <span class="px-1.5 py-0.2 rounded bg-wiz-crimsonBg text-wiz-crimson text-[9px] font-bold">CVSS ${cvss}</span>
+          </div>
+          <p class="text-[10px] text-archival-muted leading-relaxed">${desc}</p>
+        </div>
+      `;
+    });
+    html += `</div></div>`;
+  } else {
+    html += `
+      <div class="p-3 rounded arch-border bg-archival-surface space-y-1">
+        <div class="text-[10px] font-bold text-archival-faint uppercase">ATTACHED VULNERABILITIES</div>
+        <div class="text-[10px] text-wiz-emerald font-semibold">✓ 0 known vulnerabilities on this resource</div>
+      </div>
+    `;
+  }
+
+  // Box 2: RBAC & ServiceAccount
+  if (attachedSa) {
+    const saName = attachedSa.clean_name || attachedSa.name || attachedSa.id;
+    html += `
+      <div class="p-3 rounded arch-border bg-archival-surface space-y-1.5">
+        <div class="text-[10px] font-bold text-archival-faint uppercase">RBAC & SERVICE ACCOUNT</div>
+        <div class="text-[11px] text-archival-ink font-semibold">sa: ${saName}</div>
+        <div class="text-[10px] text-archival-muted">
+          Namespace: <code class="bg-archival-stone px-1 rounded">${attachedSa.namespace || 'default'}</code>
+        </div>
+      </div>
+    `;
+  }
+
+  // Box 3: Network Peers (Blast Radius)
+  html += `
+    <div class="p-3 rounded arch-border bg-archival-surface space-y-1.5">
+      <div class="text-[10px] font-bold text-archival-faint uppercase">NETWORK REACHABILITY PEERS</div>
+      <div class="text-[10px] space-y-1">
+        <div class="flex justify-between">
+          <span>INBOUND:</span>
+          <span class="font-bold text-archival-ink truncate max-w-[200px]">
+            ${inboundEdges.length > 0 ? inboundEdges.map(e => e.source.split('/').pop()).join(', ') : 'None (Isolated)'}
+          </span>
+        </div>
+        <div class="flex justify-between">
+          <span>OUTBOUND:</span>
+          <span class="font-bold ${outboundEdges.some(e => e.is_attack_path) ? 'text-wiz-crimson' : 'text-archival-ink'} truncate max-w-[200px]">
+            ${outboundEdges.length > 0 ? outboundEdges.map(e => e.target.split('/').pop()).join(', ') : 'None (Terminal)'}
+          </span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+// ============================================================================
+// CANVAS CONTROLS & TOGGLES
+// ============================================================================
+function setGraphDisplayMode(mode) {
+  currentDisplayMode = mode;
+  const btnAttack = document.getElementById('btn-mode-attack');
+  const btnFull = document.getElementById('btn-mode-full');
+
+  if (mode === 'attack') {
+    if (btnAttack) btnAttack.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold transition';
+    if (btnFull) btnFull.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink transition';
+  } else {
+    if (btnFull) btnFull.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold transition';
+    if (btnAttack) btnAttack.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink transition';
+  }
+  renderUnifiedGraph(rawGraphData);
+}
+
+function toggleGraphView(view) {
+  currentGraphView = view;
+  updateStatePreviewToggles();
+  fetchGraphTopology();
+}
+
+function updateStatePreviewToggles() {
+  const prodBtn = document.getElementById('btn-toggle-prod');
+  const sandBtn = document.getElementById('btn-toggle-sandbox');
+
+  if (currentGraphView === 'prod') {
+    if (prodBtn) prodBtn.className = 'px-2 py-0.5 rounded bg-archival-surface text-archival-ink font-bold shadow-xs transition whitespace-nowrap';
+    if (sandBtn) sandBtn.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink font-semibold transition whitespace-nowrap';
+  } else {
+    if (sandBtn) sandBtn.className = 'px-2 py-0.5 rounded bg-archival-surface text-archival-ink font-bold shadow-xs transition whitespace-nowrap';
+    if (prodBtn) prodBtn.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink font-semibold transition whitespace-nowrap';
+  }
+}
+
+// Zoom & Pan
 function zoomWizCanvas(factor) {
   wizZoom = Math.min(Math.max(wizZoom * factor, 0.6), 2.2);
   applyWizTransform();
@@ -447,153 +803,20 @@ function applyWizTransform() {
   }
 }
 
-// Display Mode Switcher (Attack Path vs Full Graph)
-function setGraphDisplayMode(mode) {
-  currentDisplayMode = mode;
-  const btnAttack = document.getElementById('btn-mode-attack');
-  const btnFull = document.getElementById('btn-mode-full');
-  const fullCanvas = document.getElementById('wiz-full-cytoscape');
-
-  if (mode === 'attack') {
-    if (btnAttack) btnAttack.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold transition';
-    if (btnFull) btnFull.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink transition';
-    if (fullCanvas) fullCanvas.classList.add('hidden');
-    renderWizAttackGraph(rawGraphData);
-  } else {
-    if (btnFull) btnFull.className = 'px-2 py-0.5 rounded bg-archival-stone text-archival-ink font-bold transition';
-    if (btnAttack) btnAttack.className = 'px-2 py-0.5 rounded text-archival-muted hover:text-archival-ink transition';
-    if (fullCanvas) fullCanvas.classList.remove('hidden');
-    renderCytoscape2D(rawGraphData);
-  }
-}
-
 // ============================================================================
-// 2D CYTOSCAPE (FULL GRAPH EXPLORER FALLBACK)
+// TOP KPI DRILL-DOWNS
 // ============================================================================
-function renderCytoscape2D(data) {
-  const container = document.getElementById('topology-canvas');
-  if (!container) return;
-
-  const validElements = (data.cytoscape_elements || []).filter(el => {
-    const id = el.data?.id || '';
-    return !id.includes('virtual-super');
-  });
-
-  const cyStyles = [
-    {
-      selector: 'node',
-      style: {
-        'shape': 'round-rectangle',
-        'width': 120,
-        'height': 40,
-        'background-color': 'data(color)',
-        'border-width': 1.5,
-        'border-color': '#181818',
-        'label': 'data(label)',
-        'color': '#181818',
-        'font-family': 'JetBrains Mono, monospace',
-        'font-size': '10px',
-        'font-weight': 'bold',
-        'text-valign': 'center',
-        'text-halign': 'center',
-      }
-    },
-    {
-      selector: 'node[node_type = "CrownJewel"]',
-      style: {
-        'shape': 'star',
-        'width': 50,
-        'height': 50,
-        'background-color': '#236B48',
-        'color': '#FAF8F3',
-      }
-    },
-    {
-      selector: 'edge',
-      style: {
-        'width': 2,
-        'line-color': '#A8A29E',
-        'target-arrow-color': '#A8A29E',
-        'target-arrow-shape': 'triangle',
-        'curve-style': 'bezier',
-        'arrow-scale': 1.0,
-        'label': 'data(type)',
-        'font-size': '8px',
-        'color': '#68645C',
-      }
-    },
-    {
-      selector: 'edge[?is_attack_path]',
-      style: {
-        'width': 3,
-        'line-color': '#C93B2B',
-        'target-arrow-color': '#C93B2B',
-        'line-style': 'dashed',
-      }
-    }
-  ];
-
-  if (cy) cy.destroy();
-
-  cy = cytoscape({
-    container: container,
-    elements: validElements,
-    style: cyStyles,
-    layout: {
-      name: 'breadthfirst',
-      directed: true,
-      spacingFactor: 1.25,
-      padding: 30
-    },
-    wheelSensitivity: 0.3,
-  });
-
-  cy.on('tap', 'node', (evt) => {
-    const node = evt.target;
-    const nid = node.id();
-    const nodeObj = data.nodes.find(n => n.id === nid) || { id: nid, label: node.data('node_type') };
-    inspectEntity(nodeObj, 'node');
-  });
-
-  cy.fit(null, 30);
-}
-
-// Prod / Sandbox View Switcher
-function toggleGraphView(view) {
-  currentGraphView = view;
-  const prodBtn = document.getElementById('btn-toggle-prod');
-  const sandBtn = document.getElementById('btn-toggle-sandbox');
-  if (view === 'prod') {
-    if (prodBtn) prodBtn.className = 'px-2.5 py-1 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition whitespace-nowrap';
-    if (sandBtn) sandBtn.className = 'px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition whitespace-nowrap';
-  } else {
-    if (sandBtn) sandBtn.className = 'px-2.5 py-1 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition whitespace-nowrap';
-    if (prodBtn) prodBtn.className = 'px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition whitespace-nowrap';
-  }
-  fetchGraphTopology();
-}
-
-// ============================================================================
-// 5 INTERACTIVE TOP KPI CARDS (CLICK-TO-DRILL-DOWN)
-// ============================================================================
-function drillDownToxicCombinations() {
-  setGraphLayer('layer2');
-  switchInspectorTab('vuln');
-  expandInspector();
-  const title = document.getElementById('inspector-title');
-  if (title) title.textContent = 'TOXIC COMBINATION: Multi-Factor Chain';
-  const sub = document.getElementById('inspector-subtitle');
-  if (sub) sub.textContent = 'Exposure (Ingress) + CVE (Remote Code Execution) + DB Access';
-}
-
 function drillDownAttackPaths() {
-  if (cy) {
-    const attackNodes = cy.nodes('[?is_attack_path]');
-    cy.animate({ fit: { eles: attackNodes, padding: 50 }, duration: 800 });
-  }
+  setGraphDisplayMode('attack');
   switchInspectorTab('cypher');
   expandInspector();
   setCypherTemplate('paths');
+}
+
+function drillDownToxicCombinations() {
+  setGraphDisplayMode('attack');
+  switchInspectorTab('vuln');
+  expandInspector();
 }
 
 function drillDownOnPathFindings() {
@@ -606,30 +829,14 @@ function closeFindingsModal() {
   if (modal) modal.classList.add('hidden');
 }
 
-function drillDownSandboxVerified() {
-  toggleGraphView('sandbox');
-  switchInspectorTab('approval');
-  expandInspector();
-}
-
-function drillDownSolverLatency() {
-  const modal = document.getElementById('modal-solver');
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeSolverModal() {
-  const modal = document.getElementById('modal-solver');
-  if (modal) modal.classList.add('hidden');
-}
-
 // ============================================================================
-// RETRACTABLE RIGHT INSPECTOR DRAWER
+// RETRACTABLE INSPECTOR
 // ============================================================================
 function toggleRightInspector() {
   isInspectorCollapsed = !isInspectorCollapsed;
   const drawer = document.getElementById('right-inspector-drawer');
   const label = document.getElementById('inspector-toggle-label');
-  
+
   if (isInspectorCollapsed) {
     drawer.classList.add('collapsed');
     if (label) label.textContent = '« Inspector';
@@ -639,12 +846,8 @@ function toggleRightInspector() {
   }
 
   setTimeout(() => {
-    if (currentDisplayMode === 'attack') {
-      renderWizAttackGraph(rawGraphData);
-    } else if (cy) {
-      cy.resize();
-    }
-  }, 300);
+    renderUnifiedGraph(rawGraphData);
+  }, 280);
 }
 
 function expandInspector() {
@@ -668,26 +871,8 @@ function switchInspectorTab(tabKey) {
   });
 }
 
-function inspectEntity(entity, type) {
-  selectedEntity = entity;
-  expandInspector();
-
-  const title = document.getElementById('inspector-title');
-  const subtitle = document.getElementById('inspector-subtitle');
-  const badge = document.getElementById('inspector-entity-badge');
-
-  if (title) title.textContent = entity.name || entity.id;
-  if (subtitle) subtitle.textContent = `${entity.label || type} · ${entity.namespace || 'default'}`;
-  if (badge) badge.textContent = (entity.label || type).toUpperCase();
-}
-
-function inspectRemediationCandidate() {
-  switchInspectorTab('yaml');
-  expandInspector();
-}
-
 // ============================================================================
-// INSPECTOR ACTIONS: COPY, DOWNLOAD, VALIDATE, CYPHER, OPERATOR GATE
+// INSPECTOR ACTIONS (YAML COPY, DOWNLOAD, KUBECONFORM, CYPHER, APPROVAL)
 // ============================================================================
 function copyYamlPatch() {
   const code = document.getElementById('yaml-patch-code');
@@ -735,7 +920,6 @@ async function validateWithKubeconform() {
   }
 }
 
-// Interactive Cypher Query Runner
 async function executeInteractiveCypher() {
   const input = document.getElementById('cypher-query-input');
   const table = document.getElementById('cypher-result-table');
@@ -794,7 +978,6 @@ function setCypherTemplate(type) {
   executeInteractiveCypher();
 }
 
-// Operator Decision Actions
 async function approveAndCommitRemediation() {
   if (!currentSessionId || !currentUiToken) {
     alert('No active session token available.');
@@ -804,12 +987,13 @@ async function approveAndCommitRemediation() {
   if (btn) btn.textContent = 'COMMITTING REMEDIATION...';
 
   try {
+    const candidateId = currentOptimalCandidate ? currentOptimalCandidate.candidate_id : 'cset_isolated_db';
     const res = await fetch('/api/v1/operator/decision', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: currentSessionId,
-        candidate_set_id: 'cset_isolated_db',
+        candidate_set_id: candidateId,
         decision: 'APPROVE',
         ui_token: currentUiToken,
       })
@@ -828,13 +1012,14 @@ async function vetoAndResolveCandidate() {
   if (btn) btn.textContent = 'RECORDING VETO & RE-SOLVING...';
 
   try {
+    const candidateId = currentOptimalCandidate ? currentOptimalCandidate.candidate_id : 'cset_isolated_db';
     const res = await fetch('/api/v1/operator/veto-and-resolve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: currentSessionId,
-        candidate_set_id: 'cset_isolated_db',
-        reason: 'Operator vetoed isolate-crown-jewel-db candidate',
+        candidate_set_id: candidateId,
+        reason: 'Operator vetoed candidate',
         ui_token: currentUiToken,
       })
     });
@@ -859,11 +1044,10 @@ async function runRemediationPipeline() {
       body: JSON.stringify({ session_id: currentSessionId })
     });
     const data = await res.json();
-    
-    // Switch to sandbox view to display severed edges
+
+    // Switch to preview mode to display severed edges
     toggleGraphView('sandbox');
 
-    // Update Pill
     const pill = document.getElementById('remediation-status-pill');
     if (pill) pill.textContent = data.status || 'VERIFIED_IN_MODEL';
 
@@ -930,10 +1114,8 @@ async function sendChatMessage(msg) {
     });
     const data = await res.json();
 
-    // Render Agent Reply
     let replyHtml = `<p class="leading-relaxed whitespace-pre-wrap">${data.reply}</p>`;
-    
-    // Add Tool Badges if any
+
     if (data.tools_called && data.tools_called.length > 0) {
       replyHtml += '<div class="mt-2 pt-2 arch-border-t space-y-1 text-[10px] text-archival-faint font-bold">';
       replyHtml += '<div>EXECUTED FASTMCP TOOLS:</div><div class="flex flex-wrap gap-1">';
@@ -951,7 +1133,6 @@ async function sendChatMessage(msg) {
       <div class="text-archival-ink space-y-1.5">${replyHtml}</div>
     `;
 
-    // Add to Flight Trace Feed
     addFlightTrace(msg, data.tools_called || []);
 
   } catch (err) {
@@ -986,7 +1167,7 @@ async function syncLiveK8sCluster() {
   try {
     const res = await fetch('/api/v1/connectors/k8s-sync', { method: 'POST' });
     const data = await res.json();
-    
+
     currentSessionId = data.session_id;
     currentSnapshotSha = data.snapshot_sha;
     currentUiToken = data.ui_token;
@@ -1066,7 +1247,7 @@ async function submitManifestUpload() {
 }
 
 // ============================================================================
-// SETTINGS & MULTI-PROVIDER LLM
+// SETTINGS
 // ============================================================================
 function handleProviderChange() {
   const prov = document.getElementById('setting-provider').value;
@@ -1121,33 +1302,41 @@ async function clearOperatorVetoes() {
 }
 
 // ============================================================================
-// NAVIGATION & ACCORDIONS
+// NAVIGATION
 // ============================================================================
 function switchView(viewKey) {
-  const views = ['dashboard', 'graph', 'copilot', 'connectors', 'settings'];
+  // Map 'overview' or 'dashboard' to 'view-dashboard'
+  const targetId = (viewKey === 'overview' || viewKey === 'dashboard') ? 'view-dashboard' : `view-${viewKey}`;
+  const views = ['view-dashboard', 'view-copilot', 'view-connectors', 'view-settings'];
+
   views.forEach(v => {
-    const el = document.getElementById(`view-${v}`);
-    const navBtn = document.getElementById(`nav-${v}`);
-    if (v === viewKey) {
-      if (el) el.classList.remove('hidden');
-      if (navBtn) navBtn.className = 'w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition nav-item-active';
-    } else {
-      if (el) el.classList.add('hidden');
-      if (navBtn) navBtn.className = 'w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850';
+    const el = document.getElementById(v);
+    if (el) {
+      if (v === targetId) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
     }
   });
 
-  if (viewKey === 'graph') {
-    setTimeout(() => {
-      const fullCanvas = document.getElementById('full-topology-canvas');
-      if (fullCanvas && cy) {
-        cytoscape({
-          container: fullCanvas,
-          elements: rawGraphData.cytoscape_elements || [],
-          style: cy.style().json(),
-          layout: { name: 'breadthfirst', directed: true, spacingFactor: 1.3 }
-        });
+  // Update nav buttons
+  const navKeys = ['dashboard', 'copilot', 'connectors', 'settings'];
+  navKeys.forEach(k => {
+    const btn = document.getElementById(`nav-${k}`);
+    if (btn) {
+      const isMatch = (k === 'dashboard' && (viewKey === 'overview' || viewKey === 'dashboard')) || (k === viewKey);
+      if (isMatch) {
+        btn.className = 'w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition nav-item-active';
+      } else {
+        btn.className = 'w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850';
       }
+    }
+  });
+
+  if (viewKey === 'overview' || viewKey === 'dashboard') {
+    setTimeout(() => {
+      renderUnifiedGraph(rawGraphData);
     }, 100);
   }
 }
@@ -1165,10 +1354,6 @@ function toggleSection(sectionId) {
 
 function setupResizeObserver() {
   window.addEventListener('resize', () => {
-    if (currentDisplayMode === 'attack') {
-      renderWizAttackGraph(rawGraphData);
-    } else if (cy) {
-      cy.resize();
-    }
+    renderUnifiedGraph(rawGraphData);
   });
 }

@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goat-web
+  namespace: goat
+  labels:
+    app: goat-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: goat-web
+  template:
+    metadata:
+      labels:
+        app: goat-web
+    spec:
+      serviceAccountName: goat-web-sa
+      containers:
+      - name: web
+        image: nginx:1.21
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: goat-web-svc
+  namespace: goat
+spec:
+  type: LoadBalancer
+  selector:
+    app: goat-web
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-internal
+  namespace: goat
+  labels:
+    app: vault-internal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault-internal
+  template:
+    metadata:
+      labels:
+        app: vault-internal
+    spec:
+      serviceAccountName: goat-sa
+      containers:
+      - name: vault
+        image: vault:1.13.3
+        ports:
+        - containerPort: 8200
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+      volumes:
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-internal-svc
+  namespace: goat
+spec:
+  selector:
+    app: vault-internal
+  ports:
+  - port: 8200
+    targetPort: 8200
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: goat-sa
+  namespace: goat
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vault-secrets-role
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: goat-vault-binding
+subjects:
+- kind: ServiceAccount
+  name: goat-sa
+  namespace: goat
+roleRef:
+  kind: ClusterRole
+  name: vault-secrets-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-master-key
+  namespace: goat
+type: Opaque
+data:
+  key: "bWFzdGVyLWtleS1zZWNyZXQ="

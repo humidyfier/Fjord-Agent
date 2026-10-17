@@ -77,6 +77,9 @@ class SessionInitResponse(BaseModel):
     replay_mode: bool
     created_at: str
     metrics_label: str = "[DESIGN TARGET / EVAL. SPEC]"
+    remediations: List[Dict[str, Any]] = Field(default_factory=list)
+    optimal_candidate: Optional[Dict[str, Any]] = None
+    yaml_diff: Optional[str] = None
 
 
 class OperatorDecisionRequest(BaseModel):
@@ -269,14 +272,21 @@ def init_session(req: SessionInitRequest):
 
     # Ingest baseline scenario into FalkorDB
     engine = IngestionEngine()
-    k8s_yaml = (FIXTURES_DIR / "sample_cluster.yaml").read_text(encoding="utf-8")
-    engine.parse_k8s_yaml(k8s_yaml)
-    trivy_json = (FIXTURES_DIR / "trivy_report.json").read_text(encoding="utf-8")
-    engine.parse_trivy_json(trivy_json)
-    prowler_json = (FIXTURES_DIR / "prowler_report.json").read_text(encoding="utf-8")
-    engine.parse_prowler_json(prowler_json)
-    req_flows = (FIXTURES_DIR / "required_flows.yaml").read_text(encoding="utf-8")
-    engine.parse_required_flows_yaml(req_flows)
+    if req.scenario == "kubehound_reference" and (FIXTURES_DIR / "kubehound_reference.yaml").exists():
+        k8s_yaml = (FIXTURES_DIR / "kubehound_reference.yaml").read_text(encoding="utf-8")
+        engine.parse_k8s_yaml(k8s_yaml)
+    elif req.scenario == "kubernetes_goat" and (FIXTURES_DIR / "kubernetes_goat.yaml").exists():
+        k8s_yaml = (FIXTURES_DIR / "kubernetes_goat.yaml").read_text(encoding="utf-8")
+        engine.parse_k8s_yaml(k8s_yaml)
+    else:
+        k8s_yaml = (FIXTURES_DIR / "sample_cluster.yaml").read_text(encoding="utf-8")
+        engine.parse_k8s_yaml(k8s_yaml)
+        trivy_json = (FIXTURES_DIR / "trivy_report.json").read_text(encoding="utf-8")
+        engine.parse_trivy_json(trivy_json)
+        prowler_json = (FIXTURES_DIR / "prowler_report.json").read_text(encoding="utf-8")
+        engine.parse_prowler_json(prowler_json)
+        req_flows = (FIXTURES_DIR / "required_flows.yaml").read_text(encoding="utf-8")
+        engine.parse_required_flows_yaml(req_flows)
 
     # Populate Layer 1 in FalkorDB under snapshot_sha
     engine.resolve_cni_and_populate_graph(snapshot_sha)
@@ -288,6 +298,19 @@ def init_session(req: SessionInitRequest):
     orchestrator = AgentOrchestrator(session_id=session_id)
     _session_event_queues[session_id] = asyncio.Queue()
 
+    # Pre-solve optimal remediations for instant UI data binding
+    remediations_list: List[Dict[str, Any]] = []
+    optimal_candidate: Optional[Dict[str, Any]] = None
+    yaml_diff: Optional[str] = None
+    try:
+        opt_res = orchestrator.execute_tool("compute_optimal_remediations", {"graph_name": snapshot_sha})
+        if opt_res and opt_res.get("optimal_candidates"):
+            remediations_list = opt_res["optimal_candidates"]
+            optimal_candidate = remediations_list[0]
+            yaml_diff = optimal_candidate.get("yaml_diff", "")
+    except Exception:
+        pass
+
     _active_sessions[session_id] = {
         "session_id": session_id,
         "snapshot_sha": snapshot_sha,
@@ -296,7 +319,10 @@ def init_session(req: SessionInitRequest):
         "scenario": req.scenario,
         "replay_mode": req.replay_mode if req.replay_mode is not None else False,
         "orchestrator": orchestrator,
-        "candidate_set_id": None,
+        "candidate_set_id": optimal_candidate.get("candidate_id") if optimal_candidate else None,
+        "remediations": remediations_list,
+        "optimal_candidate": optimal_candidate,
+        "yaml_diff": yaml_diff,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": "INITIALIZED",
     }
@@ -314,6 +340,9 @@ def init_session(req: SessionInitRequest):
         scenario=req.scenario,
         replay_mode=_active_sessions[session_id]["replay_mode"],
         created_at=_active_sessions[session_id]["created_at"],
+        remediations=remediations_list,
+        optimal_candidate=optimal_candidate,
+        yaml_diff=yaml_diff,
     )
 
 
@@ -331,6 +360,9 @@ def get_session(session_id: str):
         "replay_mode": sess["replay_mode"],
         "status": sess["status"],
         "candidate_set_id": sess["candidate_set_id"],
+        "remediations": sess.get("remediations", []),
+        "optimal_candidate": sess.get("optimal_candidate"),
+        "yaml_diff": sess.get("yaml_diff"),
         "created_at": sess["created_at"],
         "metrics_label": "[DESIGN TARGET / EVAL. SPEC]",
     }
@@ -429,10 +461,16 @@ def get_graph_topology(
             color = "#06b6d4"  # NetworkPolicy (Cyan)
             shape = "box"
 
+        node_name = props.get("name", nid)
+        if node_name.startswith("cve-CVE-"):
+            node_name = node_name[4:]
+        elif node_name.startswith("cve-"):
+            node_name = node_name[4:]
+
         nodes.append({
             "id": nid,
             "label": primary_label,
-            "name": props.get("name", nid),
+            "name": node_name,
             "namespace": props.get("namespace", "default"),
             "properties": props,
             "color": color,

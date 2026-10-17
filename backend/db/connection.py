@@ -132,10 +132,21 @@ class FalkorDBManager:
 
     def _evict_oldest_unused_snapshot(self):
         """Evict oldest unreferenced snapshot graph if capacity exceeded."""
+        evicted = 0
         for name, refs in list(self._snapshot_lru.items()):
             if refs <= 0:
                 self.delete_graph(name)
-                break
+                evicted += 1
+                if evicted >= 3:
+                    break
+        try:
+            # Clean up unreferenced sandbox_sim_* keys directly from Redis under memory pressure
+            for k in self.client.connection.keys("sandbox_sim_*"):
+                k_str = k.decode('utf-8', errors='ignore') if isinstance(k, bytes) else str(k)
+                if k_str not in self._snapshot_lru or self._snapshot_lru.get(k_str, 0) <= 0:
+                    self.delete_graph(k_str)
+        except Exception:
+            pass
 
 
 # Global singleton instance

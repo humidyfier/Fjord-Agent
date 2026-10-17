@@ -1,0 +1,18 @@
+[
+  {
+    "CheckID": "s3_bucket_public_access",
+    "Status": "FAIL",
+    "Severity": "CRITICAL",
+    "ServiceName": "s3",
+    "ResourceArn": "arn:aws:s3:::fjord-customer-vault-pii",
+    "Description": "S3 Bucket allows unrestricted public read/write access without encryption."
+  },
+  {
+    "CheckID": "iam_role_administrator_access",
+    "Status": "FAIL",
+    "Severity": "HIGH",
+    "ServiceName": "iam",
+    "ResourceArn": "arn:aws:iam::123456789012:role/FjordCloudDataAccessor",
+    "Description": "IAM Role has overly permissive cloud administrative privileges."
+  }
+]

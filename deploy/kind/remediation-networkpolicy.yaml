@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: isolate-crown-jewel
+  namespace: fjord-t0
+spec:
+  podSelector:
+    matchLabels:
+      role: crown-jewel
+  policyTypes:
+  - Ingress
+  ingress: []

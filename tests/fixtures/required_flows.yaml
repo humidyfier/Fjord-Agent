@@ -1,0 +1,4 @@
+required_flows:
+- from_workload: prod/frontend-app
+  to_workload: prod/backend-api
+  purpose: web_to_api_business_flow

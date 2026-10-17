@@ -1,0 +1,7 @@
+# Force LF line endings for consistency across tools and platforms
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.cypher text eol=lf

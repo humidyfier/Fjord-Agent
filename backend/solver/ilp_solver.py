@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -267,6 +268,40 @@ class CuttingPlaneILPSolver:
                 disruption_cost=cost,
                 forbidden=False,
             ))
+
+        # Check persistent sentinel_memory for operator vetoes (REJECTED_BY_OPERATOR)
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            veto_rows = db_manager.query(
+                "sentinel_memory",
+                """
+                MATCH (r:RemediationRecord)
+                WHERE r.decision = 'REJECTED_BY_OPERATOR'
+                  AND (r.expires_at IS NULL OR r.expires_at > $now)
+                RETURN r.stable_key AS stable_key, r.edge_keys AS edge_keys
+                """,
+                params={"now": now_iso},
+                read_only=True,
+            )
+            vetoed_keys = set()
+            for vrow in veto_rows:
+                if vrow[0]:
+                    vetoed_keys.add(str(vrow[0]))
+                if vrow[1]:
+                    if isinstance(vrow[1], list):
+                        vetoed_keys.update(str(k) for k in vrow[1])
+                    else:
+                        vetoed_keys.add(str(vrow[1]))
+
+            if vetoed_keys:
+                for act in actions:
+                    # If action's severs_edge_keys overlap with vetoed keys, mark forbidden
+                    if any(k in vetoed_keys for k in act.severs_edge_keys) or act.action_id in vetoed_keys:
+                        act.forbidden = True
+                        act.disruption_cost = 999.0
+                        logger.info("Candidate %s vetoed by sentinel_memory operator decision", act.action_id)
+        except Exception as veto_exc:
+            logger.debug("sentinel_memory check skipped or empty: %s", veto_exc)
 
         logger.info(
             "Enumerated %d remediation candidates (%d forbidden) for graph %s",

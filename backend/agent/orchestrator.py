@@ -12,6 +12,7 @@ Coordinates:
 
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.agent.guardrails import (
@@ -79,11 +80,15 @@ class AgentOrchestrator:
         candidate_set_id: str,
         decision: str,
         operator_identity: str,
-        reason: Optional[str] = None
+        reason: Optional[str] = None,
+        stable_key: Optional[str] = None,
+        edge_keys: Optional[List[str]] = None,
+        expires_at: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         UI-only method to record operator approval or rejection.
         Never exposed in model MCP tool declarations.
+        Persists decision to sentinel_memory graph in FalkorDB.
         """
         self.logger.log_operator_action(
             candidate_set_id=candidate_set_id,
@@ -91,6 +96,37 @@ class AgentOrchestrator:
             operator_identity=operator_identity,
             reason=reason,
         )
+
+        # Write to persistent sentinel_memory graph
+        try:
+            from backend.db.connection import db_manager
+            now_iso = datetime.now(timezone.utc).isoformat()
+            db_manager.query(
+                "sentinel_memory",
+                """
+                MERGE (r:RemediationRecord {candidate_set_id: $cset_id})
+                SET r.decision = $decision,
+                    r.operator = $operator,
+                    r.reason = $reason,
+                    r.stable_key = $stable_key,
+                    r.edge_keys = $edge_keys,
+                    r.expires_at = $expires_at,
+                    r.recorded_at = $recorded_at
+                """,
+                params={
+                    "cset_id": candidate_set_id,
+                    "decision": decision,
+                    "operator": operator_identity,
+                    "reason": reason or "",
+                    "stable_key": stable_key or candidate_set_id,
+                    "edge_keys": edge_keys or [],
+                    "expires_at": expires_at,
+                    "recorded_at": now_iso,
+                }
+            )
+        except Exception as exc:
+            pass
+
         return {
             "candidate_set_id": candidate_set_id,
             "decision": decision,

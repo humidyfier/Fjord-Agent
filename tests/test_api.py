@@ -13,6 +13,7 @@ Verifies:
 6. Dashboard HTML endpoint serves 3-pane command center.
 """
 
+import os
 import pytest
 from fastapi.testclient import TestClient
 from backend.api.app import app
@@ -123,21 +124,127 @@ def test_session_lifecycle_and_operator_isolation():
 
 
 def test_command_center_html_ui():
-    """Verify Command Center HTML UI is served with 3-pane structure, chatbot, and graph canvas."""
+    """Verify Command Center HTML UI is served with Athenaeum x Wiz.io Archival Workspace layout."""
     response = client.get("/")
     assert response.status_code == 200
     html = response.text
-    assert "PROJECT FJORD" in html
-    assert "FastMCP Flight Trace" in html
+    assert "ATHEÑÆUM" in html
+    assert "FJORD" in html
+    assert "cytoscape" in html
     assert "topology-canvas" in html
-    assert "Explainable Path Proof" in html
-    assert "Synthesized K8s Patch" in html
-    assert "Operator Review Gate" in html
-    assert "vis-network" in html
-    assert "Fjord Agent Console" in html
-    assert "In-Graph FalkorDB Cypher Inspector" in html
-    assert "Node Inspector" in html
-    assert "Ask Fjord about attack paths" in html
+    assert "css-barcode" in html
+    assert "WIZ TOXIC COMBINATIONS" in html
+    assert "RECORD INSPECTOR" in html
+    assert "AGENT COPILOT" in html
+    assert "CONNECTORS & MCP" in html
+    assert "SETTINGS & API" in html
+    assert "DASHBOARD" in html
+    assert "SECURITY GRAPH" in html
+
+
+def test_cytoscape_graph_elements_and_sandbox_toggle():
+    """Verify /api/v1/graph/{id} returns Cytoscape-formatted nodes and edges for prod and sandbox views."""
+    init_res = client.post("/api/v1/sessions/init", json={"scenario": "sample_cluster", "replay_mode": True})
+    assert init_res.status_code == 200
+    sess = init_res.json()
+    session_id = sess["session_id"]
+    snapshot_sha = sess["snapshot_sha"]
+
+    # Test querying prod view
+    prod_res = client.get(f"/api/v1/graph/{session_id}?view=prod")
+    assert prod_res.status_code == 200
+    prod_data = prod_res.json()
+    assert "cytoscape_elements" in prod_data
+    assert len(prod_data["cytoscape_elements"]) > 0
+    # Verify node element structure
+    node_elems = [e for e in prod_data["cytoscape_elements"] if e.get("group") == "nodes"]
+    assert len(node_elems) > 0
+    assert "shape" in node_elems[0]["data"]
+    assert "color" in node_elems[0]["data"]
+
+    # Run remediation pipeline to create sandbox
+    run_res = client.post("/api/v1/agent/run", json={"session_id": session_id})
+    assert run_res.status_code == 200
+
+    # Test querying sandbox view
+    sand_res = client.get(f"/api/v1/graph/{session_id}?view=sandbox")
+    assert sand_res.status_code == 200
+    sand_data = sand_res.json()
+    assert "cytoscape_elements" in sand_data
+    assert len(sand_data["cytoscape_elements"]) > 0
+
+
+def test_chat_api_key_enforcement():
+    """Verify /api/v1/chat enforces Gemini API key check when replay_mode is False and no key is set."""
+    # Init session with replay_mode=False
+    init_res = client.post("/api/v1/sessions/init", json={"scenario": "sample_cluster", "replay_mode": False})
+    assert init_res.status_code == 200
+    session_id = init_res.json()["session_id"]
+
+    old_key = os.environ.pop("GEMINI_API_KEY", None)
+    try:
+        chat_res = client.post("/api/v1/chat", json={
+            "session_id": session_id,
+            "message": "Analyze crown jewel attack paths",
+            "api_key": ""
+        })
+        assert chat_res.status_code == 200
+        data = chat_res.json()
+        assert data["requires_key"] is True
+        assert "Gemini API Key Required" in data["reply"]
+    finally:
+        if old_key is not None:
+            os.environ["GEMINI_API_KEY"] = old_key
+
+
+
+def test_verify_key_endpoint():
+    """Verify /api/v1/settings/verify-key endpoint."""
+    res = client.post("/api/v1/settings/verify-key", json={"api_key": "dummy_test_key"})
+    assert res.status_code == 200
+    data = res.json()
+    assert "valid" in data
+    assert "message" in data
+
+
+def test_manifest_upload_and_mcp_execute():
+    """Verify /api/v1/upload manifest ingestion and /api/v1/mcp/execute direct tool testing."""
+    # 1. Test manifest upload
+    sample_manifest = """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upload-test-app
+  namespace: test-ns
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: test-ctr
+        image: nginx:latest
+"""
+    upload_res = client.post("/api/v1/upload", json={
+        "filename": "test-workload.yaml",
+        "yaml_content": sample_manifest,
+        "cluster_id": "uploaded-test-cluster"
+    })
+    assert upload_res.status_code == 200
+    upload_data = upload_res.json()
+    assert upload_data["status"] == "INGESTED"
+    assert upload_data["snapshot_sha"].startswith("prod_")
+
+    # 2. Test direct MCP tool execution
+    mcp_res = client.post("/api/v1/mcp/execute", json={
+        "tool_name": "get_posture_and_cluster_summary",
+        "arguments": {"graph_name": upload_data["snapshot_sha"]}
+    })
+    assert mcp_res.status_code == 200
+    mcp_data = mcp_res.json()
+    assert mcp_data["status"] == "SUCCESS"
+    assert mcp_data["tool"] == "get_posture_and_cluster_summary"
+    assert "result" in mcp_data
+
+
 
 
 def test_chat_explain_attack_path():

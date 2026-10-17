@@ -1,6 +1,7 @@
 """
 backend/api/app.py
-FastAPI Web Server & Command Center Dashboard Host for Project Fjord.
+Master Web Server & Archival Security Workspace Host for Project Fjord.
+Theme: ATHEÑÆUM × WIZ.IO Archival Security Workspace (Neo-Brutalist Grid, Warm Cream & Obsidian Charcoal).
 """
 
 from fastapi import FastAPI
@@ -30,537 +31,1158 @@ app.include_router(router)
 @app.get("/", response_class=HTMLResponse)
 def get_command_center_ui():
     """
-    Renders the professional dark-mode 3-pane DevSecOps Command Center dashboard:
-    - Left Pane: Scenario Selector, BYOK Key Input, Replay Mode Badge, Interactive Chatbot Console & FastMCP Trace
-    - Center Pane: Interactive FalkorDB Topology Canvas (Vis.js), Sandbox Toggle & In-Graph Cypher Inspector
-    - Right Pane: Active Node Inspector, Explainable Path Proof, YAML Diff & Template-Rendered Operator Approval Cards
+    Renders the Athenaeum x Wiz.io Archival Security Workspace:
+    - Left Sidebar (240px): Deep Obsidian Charcoal (#141517), Scenario Quick-Loader, 5-View Navigation, System Telemetry
+    - Center Main Workspace: Warm Archival Cream (#F3EFE6), 5-Block KPI Strip, Cytoscape.js Security Graph, Remediation Queue
+    - Multi-View Tabs: DASHBOARD, SECURITY GRAPH, AGENT COPILOT, CONNECTORS & MCP, SETTINGS & API
+    - Right Record Inspector Drawer (360px): Warm Stone (#ECE7DC), CSS Barcode, DETAILS, YAML PATCH, CYPHER, AUDIT Tabs
+    - Bottom Status Bar (32px): Deep Obsidian Charcoal (#141517), Live Engine Telemetry
     """
     html_content = r"""<!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FJORD // Autonomous Attack-Path Remediation Agent</title>
+  <title>FJORD // ATHEÑÆUM × WIZ.IO Security Workspace</title>
+  
+  <!-- Typography: Space Grotesk (KPI Display), Inter (UI Body), JetBrains Mono (Technical/Cypher) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- Cytoscape.js CDN for Real Interactive Graph Rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Vis.js CDN for Real Interactive Graph Rendering -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
+  <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
   <script>
     tailwind.config = {
-      darkMode: 'class',
       theme: {
         extend: {
+          fontFamily: {
+            display: ['"Space Grotesk"', 'sans-serif'],
+            body: ['"Inter"', '"DM Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
           colors: {
-            fjord: {
-              950: '#040711',
-              900: '#070b14',
-              850: '#0d1322',
-              800: '#11192e',
-              750: '#162038',
-              700: '#1c2846',
-              600: '#26375e',
-              accent: '#38bdf8',
-              crimson: '#ef4444',
-              emerald: '#10b981',
-              amber: '#f59e0b',
+            obsidian: {
+              950: '#0C0D0E',
+              900: '#141517',
+              850: '#1C1D21',
+              800: '#24262B',
+              border: '#2A2C30',
+            },
+            archival: {
+              bg: '#F3EFE6',
+              surface: '#FAF8F3',
+              stone: '#ECE7DC',
+              border: '#D4CFC4',
+              ink: '#181818',
+              muted: '#68645C',
+              faint: '#8E8A80',
+              cream: '#EAE6DF',
+            },
+            wiz: {
+              crimson: '#C93B2B',
+              crimsonBg: '#FBEAE8',
+              ochre: '#D97724',
+              ochreBg: '#FDF3E7',
+              emerald: '#236B48',
+              emeraldBg: '#E6F4ED',
+              blue: '#2563EB',
+              blueBg: '#EFF6FF',
+              purple: '#7C3AED',
+              purpleBg: '#F5F3FF',
             }
           }
         }
       }
     }
   </script>
+
   <style>
-    body { background-color: #040711; color: #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; }
-    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
-    .custom-scroll::-webkit-scrollbar-thumb { background: #1c2846; border-radius: 4px; }
-    .custom-scroll::-webkit-scrollbar-track { background: #070b14; }
-    #topology-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-    .pulse-crimson { animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-    .chat-bubble-agent { background: #0d1322; border: 1px solid #1c2846; }
-    .chat-bubble-user { background: #0e7490; border: 1px solid #0891b2; }
+    body {
+      background-color: #F3EFE6;
+      color: #181818;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    .font-display { font-family: 'Space Grotesk', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* Custom Archival Scrollbars */
+    .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #D4CFC4; border-radius: 2px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+
+    .dark-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+    .dark-scroll::-webkit-scrollbar-thumb { background: #2A2C30; border-radius: 2px; }
+    .dark-scroll::-webkit-scrollbar-track { background: transparent; }
+
+    /* Barcode Graphic */
+    .css-barcode {
+      display: flex;
+      height: 22px;
+      gap: 2px;
+      align-items: stretch;
+    }
+    .css-barcode span {
+      background-color: #181818;
+      display: inline-block;
+    }
+    
+    /* Cytoscape Canvas Container */
+    #topology-canvas {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      inset: 0;
+      background: #FAF8F3;
+    }
+
+    /* Architectural Grid Borders */
+    .arch-border { border: 1px solid #D4CFC4; }
+    .arch-border-r { border-right: 1px solid #D4CFC4; }
+    .arch-border-b { border-bottom: 1px solid #D4CFC4; }
+    .arch-border-l { border-left: 1px solid #D4CFC4; }
+    .arch-border-t { border-top: 1px solid #D4CFC4; }
+
+    /* Nav Item States */
+    .nav-item-active {
+      background-color: #24262B;
+      color: #EAE6DF;
+      border-left: 3px solid #236B48;
+    }
   </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden select-none">
-  <!-- Top Navigation Header -->
-  <header class="h-14 border-b border-fjord-700 bg-fjord-850 flex items-center justify-between px-6 shrink-0 z-20">
-    <div class="flex items-center space-x-3">
-      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center font-black text-white text-base tracking-wider shadow-lg shadow-cyan-500/20">
-        FJ
-      </div>
-      <div>
-        <h1 class="font-bold text-sm tracking-wide flex items-center space-x-2">
-          <span>PROJECT FJORD</span>
-          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-fjord-700 text-cyan-400 border border-cyan-800">v1.0-FalkorDB</span>
-        </h1>
-        <p class="text-[10px] text-gray-400">Autonomous Cloud & Container Security Posture & Remediation Agent</p>
-      </div>
-    </div>
 
-    <!-- Center Sandbox Toggle Switch -->
-    <div class="flex items-center space-x-3 bg-fjord-900 px-3 py-1.5 rounded-lg border border-fjord-700">
-      <span class="text-xs font-mono text-gray-400 font-semibold">GRAPH VIEW:</span>
-      <button id="btn-view-prod" onclick="toggleGraphView('prod')" class="px-3 py-1 text-xs font-mono font-semibold rounded bg-cyan-600 text-white shadow-md transition flex items-center">
-        <i class="fa-solid fa-cube mr-1.5"></i> [Graph: prod_cluster]
-      </button>
-      <button id="btn-view-sandbox" onclick="toggleGraphView('sandbox')" class="px-3 py-1 text-xs font-mono font-semibold rounded text-gray-400 hover:text-white transition flex items-center">
-        <i class="fa-solid fa-vial mr-1.5"></i> [Graph: sandbox_sim]
-      </button>
-    </div>
+  <!-- Main Horizontal Layout: Left Sidebar + Center Workspace + Right Inspector -->
+  <div class="flex-1 flex overflow-hidden">
 
-    <!-- Right Header Badges -->
-    <div class="flex items-center space-x-3">
-      <span id="session-badge" class="text-[10px] font-mono px-2 py-1 rounded bg-fjord-800 text-cyan-400 border border-fjord-700">
-        ID: <span id="header-sess-id">session_init</span>
-      </span>
-      <span class="text-[10px] font-mono px-2 py-1 rounded bg-amber-950 text-amber-400 border border-amber-800 flex items-center">
-        <i class="fa-solid fa-circle text-[6px] mr-1.5 animate-ping"></i> REPLAY MODE [Live FalkorDB]
-      </span>
-      <span class="text-[10px] font-mono px-2 py-1 rounded bg-fjord-800 text-gray-400 border border-fjord-700 hidden lg:inline">
-        [DESIGN TARGET / EVAL. SPEC]
-      </span>
-    </div>
-  </header>
-
-  <!-- Main 3-Pane Body -->
-  <main class="flex-1 flex overflow-hidden">
     <!-- ================================================================= -->
-    <!-- PANE 1: Left Pane (Scenario, Interactive Chatbot & FastMCP Trace)  -->
+    <!-- LEFT SIDEBAR: Deep Obsidian Charcoal (#141517, 240px fixed)      -->
     <!-- ================================================================= -->
-    <section class="w-96 border-r border-fjord-700 bg-fjord-850 flex flex-col shrink-0">
-      <!-- Scenario & BYOK Card -->
-      <div class="p-3 border-b border-fjord-700 space-y-2.5 bg-fjord-900/60">
-        <div class="flex space-x-2">
-          <div class="flex-1">
-            <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Target Cluster</label>
-            <select id="scenario-select" onchange="initSession()" class="w-full text-xs bg-fjord-850 border border-fjord-700 rounded px-2 py-1.5 text-gray-200 focus:outline-none focus:border-cyan-500 font-mono">
-              <option value="sample_cluster">E-Commerce Core (3-Tier K8s)</option>
-              <option value="kubehound_reference">KubeHound RBAC/Escape Bench</option>
-              <option value="kubernetes_goat">Kubernetes Goat Pods</option>
-              <option value="bad_pods">Bad Pods Escalation Set</option>
-            </select>
+    <aside class="w-[240px] bg-obsidian-900 border-r border-obsidian-border flex flex-col shrink-0 text-archival-cream z-20">
+      
+      <!-- Institution / Engine Status Box -->
+      <div class="p-3.5 border-b border-obsidian-border space-y-1">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <div class="w-5 h-5 rounded bg-archival-cream text-obsidian-900 font-display font-bold text-xs flex items-center justify-center">
+              FJ
+            </div>
+            <span class="font-display font-bold text-xs tracking-wider text-archival-cream">ATHEÑÆUM // FJORD</span>
           </div>
-          <div class="w-32">
-            <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Gemini API Key</label>
-            <input type="password" id="byok-input" placeholder="BYOK (optional)" class="w-full text-xs bg-fjord-850 border border-fjord-700 rounded px-2 py-1.5 text-gray-200 focus:outline-none focus:border-cyan-500 font-mono text-ellipsis">
+          <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-obsidian-800 text-wiz-emerald border border-obsidian-border">v1.0</span>
+        </div>
+        <div class="pt-1 flex items-center justify-between text-[10px] font-mono text-archival-faint">
+          <span>ENGINE: FALKORDB</span>
+          <span class="text-wiz-emerald font-bold">● LOCAL</span>
+        </div>
+        <div class="text-[9px] font-mono text-archival-faint flex items-center space-x-1">
+          <span>DATA INTEGRITY:</span>
+          <span class="text-wiz-emerald font-bold">VERIFIED</span>
+        </div>
+      </div>
+
+      <!-- Navigation Views Selector -->
+      <div class="py-2 border-b border-obsidian-border">
+        <div class="px-3 pb-1 text-[9px] font-mono uppercase tracking-wider text-archival-faint">Workspace Views</div>
+        <nav class="space-y-0.5 text-xs font-mono">
+          <button onclick="switchView('dashboard')" id="nav-dashboard" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition nav-item-active">
+            <i class="fa-solid fa-layer-group text-wiz-emerald w-4 text-center"></i>
+            <span>DASHBOARD</span>
+          </button>
+          <button onclick="switchView('graph')" id="nav-graph" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850">
+            <i class="fa-solid fa-circle-nodes w-4 text-center"></i>
+            <span>SECURITY GRAPH</span>
+          </button>
+          <button onclick="switchView('copilot')" id="nav-copilot" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850">
+            <i class="fa-solid fa-robot w-4 text-center"></i>
+            <span>AGENT COPILOT</span>
+          </button>
+          <button onclick="switchView('connectors')" id="nav-connectors" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850">
+            <i class="fa-solid fa-plug w-4 text-center"></i>
+            <span>CONNECTORS & MCP</span>
+          </button>
+          <button onclick="switchView('settings')" id="nav-settings" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850">
+            <i class="fa-solid fa-sliders w-4 text-center"></i>
+            <span>SETTINGS & API</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Scenario Quick-Loader -->
+      <div class="flex-1 p-3 overflow-y-auto dark-scroll space-y-2 border-b border-obsidian-border">
+        <div class="text-[9px] font-mono uppercase tracking-wider text-archival-faint flex items-center justify-between">
+          <span>SCENARIO ARCHIVES</span>
+          <i class="fa-solid fa-box-archive text-[10px]"></i>
+        </div>
+        <div class="space-y-1 font-mono text-[11px]">
+          <button onclick="loadScenario('sample_cluster')" class="w-full text-left p-2 rounded bg-obsidian-850 hover:bg-obsidian-800 border border-obsidian-border transition text-archival-cream">
+            <div class="font-bold text-[10px] text-archival-cream truncate">E-Commerce Core</div>
+            <div class="text-[9px] text-archival-faint">3 Workloads · 1 DB Secret</div>
+          </button>
+          <button onclick="loadScenario('kubehound_reference')" class="w-full text-left p-2 rounded bg-obsidian-850 hover:bg-obsidian-800 border border-obsidian-border transition text-archival-cream">
+            <div class="font-bold text-[10px] text-archival-cream truncate">KubeHound RBAC/Escape</div>
+            <div class="text-[9px] text-archival-faint">5 Workloads · Host Breakout</div>
+          </button>
+          <button onclick="loadScenario('kubernetes_goat')" class="w-full text-left p-2 rounded bg-obsidian-850 hover:bg-obsidian-800 border border-obsidian-border transition text-archival-cream">
+            <div class="font-bold text-[10px] text-archival-cream truncate">Kubernetes Goat Pods</div>
+            <div class="text-[9px] text-archival-faint">4 Workloads · docker.sock</div>
+          </button>
+          <button onclick="loadScenario('bad_pods')" class="w-full text-left p-2 rounded bg-obsidian-850 hover:bg-obsidian-800 border border-obsidian-border transition text-archival-cream">
+            <div class="font-bold text-[10px] text-archival-cream truncate">Bad Pods Escalation</div>
+            <div class="text-[9px] text-archival-faint">6 Workloads · Multi-CVE</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- System Telemetry Panel (Bottom Sidebar) -->
+      <div class="p-3 bg-obsidian-950 space-y-2 text-[10px] font-mono">
+        <div class="text-[9px] uppercase tracking-wider text-archival-faint font-bold">SYSTEM TELEMETRY</div>
+        <div>
+          <div class="flex justify-between text-[9px] text-archival-faint mb-0.5">
+            <span>GRAPH NODES</span>
+            <span id="telemetry-nodes" class="text-archival-cream">14 / 20</span>
+          </div>
+          <div class="w-full h-1 bg-obsidian-800 rounded overflow-hidden">
+            <div id="bar-nodes" class="h-full bg-wiz-blue transition-all duration-500" style="width: 70%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[9px] text-archival-faint mb-0.5">
+            <span>EXPLOIT EDGES</span>
+            <span id="telemetry-edges" class="text-archival-cream">13 / 15</span>
+          </div>
+          <div class="w-full h-1 bg-obsidian-800 rounded overflow-hidden">
+            <div id="bar-edges" class="h-full bg-wiz-crimson transition-all duration-500" style="width: 85%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[9px] text-archival-faint mb-0.5">
+            <span>INJECTION GUARD</span>
+            <span class="text-wiz-emerald font-bold">50 / 50 (100%)</span>
+          </div>
+          <div class="w-full h-1 bg-obsidian-800 rounded overflow-hidden">
+            <div class="h-full bg-wiz-emerald" style="width: 100%"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ================================================================= -->
+    <!-- CENTER MAIN WORKSPACE: Warm Archival Cream (#F3EFE6)             -->
+    <!-- ================================================================= -->
+    <main class="flex-1 flex flex-col bg-archival-bg overflow-hidden relative min-w-0">
+
+      <!-- =============================================================== -->
+      <!-- VIEW 1: DASHBOARD (Wiz Overview, 5 KPI Blocks & Cytoscape Graph) -->
+      <!-- =============================================================== -->
+      <div id="view-dashboard" class="flex-1 flex flex-col overflow-hidden">
+        
+        <!-- Top Workspace Bar -->
+        <div class="h-12 bg-archival-surface arch-border-b px-5 flex items-center justify-between shrink-0">
+          <div class="flex items-center space-x-3">
+            <span class="font-display font-bold text-xs tracking-wider uppercase text-archival-ink">
+              ARCHIVAL SECURITY WORKSPACE // WIZ TOXIC COMBINATIONS
+            </span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-archival-stone arch-border text-archival-muted">
+              SCENARIO: <span id="dash-active-scenario" class="font-bold text-archival-ink">sample_cluster</span>
+            </span>
+          </div>
+
+          <!-- Sandbox Toggle Switch -->
+          <div class="flex items-center space-x-2">
+            <span class="text-[10px] font-mono text-archival-muted uppercase font-semibold">VIEW:</span>
+            <div class="inline-flex rounded arch-border bg-archival-stone p-0.5 text-xs font-mono">
+              <button onclick="toggleGraphView('prod')" id="btn-toggle-prod" class="px-2.5 py-1 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition">
+                prod_cluster
+              </button>
+              <button onclick="toggleGraphView('sandbox')" id="btn-toggle-sandbox" class="px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition">
+                sandbox_sim
+              </button>
+            </div>
+            <button onclick="runRemediationPipeline()" class="ml-2 px-3 py-1.5 rounded bg-obsidian-900 hover:bg-obsidian-800 text-archival-cream text-xs font-mono font-bold transition flex items-center space-x-1.5 shadow">
+              <i class="fa-solid fa-bolt text-wiz-ochre text-[10px]"></i>
+              <span>RUN REMEDIATION AGENT</span>
+            </button>
           </div>
         </div>
 
-        <button onclick="runRemediationPipeline()" id="btn-run-agent" class="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs py-2 px-3 rounded shadow-md transition flex items-center justify-center space-x-2">
-          <i class="fa-solid fa-bolt text-amber-300"></i>
-          <span>RUN REMEDIATION AGENT (MILP + SANDBOX)</span>
+        <!-- 5-Block Architectural KPI Strip (1px #D4CFC4 Grid) -->
+        <div class="grid grid-cols-5 bg-archival-surface arch-border-b shrink-0 text-archival-ink">
+          
+          <!-- Block 1: Toxic Combinations -->
+          <div class="p-3.5 arch-border-r space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-[9px] font-mono uppercase tracking-wider text-archival-muted font-bold">TOXIC COMBINATIONS</span>
+              <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-wiz-crimsonBg text-wiz-crimson font-bold">CRITICAL</span>
+            </div>
+            <div class="font-display text-[42px] font-bold leading-none text-wiz-crimson" id="kpi-toxic">03</div>
+            <div class="text-[10px] font-mono text-archival-muted">ACTIVE CHAINS</div>
+            <div class="text-[9px] font-mono text-archival-muted leading-tight pt-0.5 truncate">
+              Internet &rarr; CVE-2023-38606 &rarr; CrownJewel
+            </div>
+          </div>
+
+          <!-- Block 2: Attack Paths (algo.SPpaths) -->
+          <div class="p-3.5 arch-border-r space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-[9px] font-mono uppercase tracking-wider text-archival-muted font-bold">ATTACK PATHS</span>
+              <span class="text-[9px] font-mono text-archival-muted">algo.SPpaths</span>
+            </div>
+            <div class="font-display text-[42px] font-bold leading-none text-archival-ink" id="kpi-paths">02</div>
+            <div class="text-[10px] font-mono text-archival-muted">SHORTEST HOPS</div>
+            <div class="text-[9px] font-mono text-wiz-crimson font-semibold pt-0.5 flex items-center">
+              <span class="w-1.5 h-1.5 rounded-full bg-wiz-crimson inline-block mr-1"></span>
+              <span>Target: crown-jewel-db</span>
+            </div>
+          </div>
+
+          <!-- Block 3: On-Path Findings (CVE Prioritization) -->
+          <div class="p-3.5 arch-border-r space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-[9px] font-mono uppercase tracking-wider text-archival-muted font-bold">ON-PATH FINDINGS</span>
+              <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-wiz-ochreBg text-wiz-ochre font-bold">FILTERED</span>
+            </div>
+            <div class="flex items-baseline space-x-2">
+              <div class="font-display text-[42px] font-bold leading-none text-wiz-ochre" id="kpi-cves">04</div>
+              <span class="text-[11px] font-mono text-archival-muted">/ 30 raw</span>
+            </div>
+            <div class="text-[10px] font-mono text-archival-muted">PRIORITIZED CVES</div>
+            <!-- Mini SVG Bar comparison -->
+            <div class="flex items-center space-x-1 pt-1">
+              <svg width="120" height="8" class="overflow-hidden rounded">
+                <rect x="0" y="0" width="30" height="8" fill="#D97724" />
+                <rect x="30" y="0" width="90" height="8" fill="#D4CFC4" opacity="0.6" />
+              </svg>
+              <span class="text-[8px] font-mono text-archival-muted">13% On-Path</span>
+            </div>
+          </div>
+
+          <!-- Block 4: Sandbox Verified -->
+          <div class="p-3.5 arch-border-r space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-[9px] font-mono uppercase tracking-wider text-archival-muted font-bold">SANDBOX VERIFIED</span>
+              <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-wiz-emeraldBg text-wiz-emerald font-bold">GRAPH.COPY</span>
+            </div>
+            <div class="font-display text-[42px] font-bold leading-none text-wiz-emerald" id="kpi-sandbox">01</div>
+            <div class="text-[10px] font-mono text-archival-muted">0 SURVIVING PATHS</div>
+            <div class="flex items-center space-x-1 text-[9px] font-mono text-wiz-emerald pt-0.5">
+              <i class="fa-solid fa-check-double text-[8px]"></i>
+              <span>100% Required Flows Preserved</span>
+            </div>
+          </div>
+
+          <!-- Block 5: Solver Latency (Pure MILP) -->
+          <div class="p-3.5 space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-[9px] font-mono uppercase tracking-wider text-archival-muted font-bold">SOLVER LATENCY</span>
+              <span class="text-[9px] font-mono text-wiz-emerald font-bold">&lt; 50ms PASS</span>
+            </div>
+            <div class="font-display text-[42px] font-bold leading-none text-archival-ink" id="kpi-latency">37<span class="text-lg font-normal">ms</span></div>
+            <div class="text-[10px] font-mono text-archival-muted">MILP OPTIMAL CUT</div>
+            <!-- Mini Sparkline SVG -->
+            <div class="pt-1">
+              <svg width="100" height="10" class="stroke-wiz-emerald fill-none stroke-[1.5]">
+                <polyline points="0,8 20,6 40,7 60,3 80,5 100,2" />
+              </svg>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Center Workspace Body: Cytoscape Security Graph Canvas -->
+        <div class="flex-1 flex flex-col min-h-0 relative">
+          
+          <!-- Graph Canvas Container -->
+          <div class="flex-1 relative w-full h-full">
+            <div id="topology-canvas"></div>
+            
+            <!-- Floating Canvas Legend -->
+            <div class="absolute bottom-3 left-4 z-10 bg-archival-surface/90 backdrop-blur p-2.5 rounded arch-border text-[10px] font-mono space-y-1 shadow-sm">
+              <div class="font-bold uppercase tracking-wider text-archival-muted text-[9px]">Graph Entities (Wiz Taxonomy)</div>
+              <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded bg-wiz-blue inline-block"></span><span>Workload (Blue Box)</span></div>
+              <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rotate-45 bg-wiz-ochre inline-block"></span><span>PostureFinding / CVE (Yellow Diamond)</span></div>
+              <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded-full bg-wiz-purple inline-block"></span><span>IAM / ServiceAccount (Purple Hexagon)</span></div>
+              <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded bg-wiz-emerald inline-block"></span><span>CrownJewel (Green Star)</span></div>
+              <div class="flex items-center space-x-2"><span class="w-3 h-0.5 bg-wiz-crimson inline-block"></span><span class="text-wiz-crimson font-bold">Active Attack Path (:EXPLOIT_STEP)</span></div>
+              <div class="flex items-center space-x-2"><span class="w-3 h-0.5 border-t border-dashed border-archival-muted inline-block"></span><span>Severed Edge [DASHED]</span></div>
+            </div>
+          </div>
+
+          <!-- Bottom Grid: Prioritized Remediation Actions Table -->
+          <div class="h-44 bg-archival-surface arch-border-t flex flex-col shrink-0">
+            <div class="px-4 py-1.5 arch-border-b bg-archival-stone/40 flex justify-between items-center">
+              <span class="text-[10px] font-mono uppercase font-bold text-archival-ink flex items-center">
+                <i class="fa-solid fa-list-check text-wiz-emerald mr-1.5"></i>
+                PRIORITIZED REMEDIATION ACTIONS (MILP HITTING SET)
+              </span>
+              <span id="remediation-summary-count" class="text-[9px] font-mono text-archival-muted">1 Optimal Action Available</span>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scroll p-0">
+              <table class="w-full text-left text-[11px] font-mono border-collapse">
+                <thead>
+                  <tr class="arch-border-b text-[9px] uppercase text-archival-muted bg-archival-surface">
+                    <th class="p-2 pl-4">ID</th>
+                    <th class="p-2">ACTION TYPE</th>
+                    <th class="p-2">TARGET RESOURCE</th>
+                    <th class="p-2">DISRUPTION</th>
+                    <th class="p-2">STATUS</th>
+                    <th class="p-2 text-right pr-4">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody id="remediation-table-body">
+                  <tr class="arch-border-b hover:bg-archival-stone/30 transition">
+                    <td class="p-2 pl-4 text-archival-ink font-bold">netpol_01</td>
+                    <td class="p-2 text-wiz-blue font-bold">NETWORK_POLICY_ADD</td>
+                    <td class="p-2 text-archival-ink">fjord-t0/crown-jewel-db</td>
+                    <td class="p-2 text-wiz-emerald tracking-widest font-bold">●○○○○ <span class="text-[9px] font-normal text-archival-muted">(1.0)</span></td>
+                    <td class="p-2"><span class="px-1.5 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald font-bold text-[9px]">VERIFIED_IN_MODEL</span></td>
+                    <td class="p-2 text-right pr-4">
+                      <button onclick="inspectRemediationCandidate()" class="px-2 py-0.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-[10px] font-bold">
+                        SIMULATE & INSPECT
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- =============================================================== -->
+      <!-- VIEW 2: SECURITY GRAPH (Full-Screen Cytoscape Explorer)         -->
+      <!-- =============================================================== -->
+      <div id="view-graph" class="flex-1 flex flex-col overflow-hidden hidden">
+        <div class="h-12 bg-archival-surface arch-border-b px-5 flex items-center justify-between shrink-0">
+          <span class="font-display font-bold text-xs tracking-wider uppercase text-archival-ink">
+            FULL-SCREEN FALKORDB EXPLOIT STATE PLANE
+          </span>
+          <div class="flex items-center space-x-2 text-xs font-mono">
+            <button onclick="setGraphLayout('cose')" class="px-2.5 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink">
+              Layout: CoSE
+            </button>
+            <button onclick="setGraphLayout('concentric')" class="px-2.5 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink">
+              Concentric
+            </button>
+            <button onclick="fitGraph()" class="px-2.5 py-1 rounded bg-obsidian-900 text-archival-cream">
+              Fit Canvas
+            </button>
+          </div>
+        </div>
+        <div class="flex-1 relative w-full h-full bg-archival-surface">
+          <div id="fullscreen-topology-canvas" class="w-full h-full"></div>
+        </div>
+      </div>
+
+      <!-- =============================================================== -->
+      <!-- VIEW 3: AGENT COPILOT (Chatbot with Gemini 3.8 Flash & Traces)  -->
+      <!-- =============================================================== -->
+      <div id="view-copilot" class="flex-1 flex flex-col overflow-hidden hidden bg-archival-bg">
+        <div class="h-12 bg-archival-surface arch-border-b px-5 flex items-center justify-between shrink-0">
+          <div class="flex items-center space-x-2">
+            <span class="font-display font-bold text-xs tracking-wider uppercase text-archival-ink">
+              FJORD AUTONOMOUS AGENT COPILOT
+            </span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-wiz-purpleBg text-wiz-purple font-bold">
+              Gemini 3.8 Flash (Thinking Level 2)
+            </span>
+          </div>
+          <!-- Manifest Upload Zone -->
+          <div class="flex items-center space-x-2 text-xs font-mono">
+            <label class="px-3 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink cursor-pointer flex items-center space-x-1.5">
+              <i class="fa-solid fa-cloud-arrow-up text-archival-muted"></i>
+              <span>Upload K8s / JSON Manifest</span>
+              <input type="file" id="manifest-upload-input" onchange="handleManifestUpload(event)" class="hidden" accept=".yaml,.yml,.json">
+            </label>
+          </div>
+        </div>
+
+        <!-- Copilot Chat Window -->
+        <div class="flex-1 flex flex-col min-h-0 p-5 space-y-4">
+          <!-- Quick Suggestion Buttons -->
+          <div class="flex space-x-2 overflow-x-auto custom-scroll text-[11px] font-mono shrink-0">
+            <button onclick="sendQuickPrompt('Explain the attack path from the internet to the crown jewel.')" class="px-3 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink shrink-0 shadow-sm">
+              Map Toxic Combinations to CrownJewel
+            </button>
+            <button onclick="sendQuickPrompt('We have a deployment freeze on api-service, find an alternative NetworkPolicy cut.')" class="px-3 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-wiz-ochre font-bold shrink-0 shadow-sm">
+              Freeze api-service (Alternative Cut)
+            </button>
+            <button onclick="sendQuickPrompt('Verify the candidate remediation fix in the GRAPH.COPY sandbox.')" class="px-3 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-wiz-emerald font-bold shrink-0 shadow-sm">
+              Verify in GRAPH.COPY Sandbox
+            </button>
+          </div>
+
+          <!-- Message History -->
+          <div id="copilot-chat-history" class="flex-1 bg-archival-surface arch-border rounded p-4 overflow-y-auto custom-scroll space-y-3 font-mono text-xs">
+            <div class="p-3 bg-archival-stone/40 rounded arch-border text-archival-ink space-y-1">
+              <div class="text-[10px] font-bold text-wiz-emerald flex items-center">
+                <i class="fa-solid fa-robot mr-1.5"></i>FJORD AGENT (Gemini 3.8 Flash)
+              </div>
+              <p class="leading-relaxed">
+                Welcome to the Archival Security Copilot. I am initialized with full bidirectional tools across FalkorDB. You can ask me to explain lateral attack chains, test alternative cuts under operational constraints, or upload custom Kubernetes YAML manifests.
+              </p>
+            </div>
+          </div>
+
+          <!-- Chat Input -->
+          <div class="shrink-0 bg-archival-surface arch-border rounded p-2.5">
+            <form onsubmit="handleCopilotSubmit(event)" class="flex space-x-2">
+              <input type="text" id="copilot-input" placeholder="Ask Fjord about attack paths, explain fixes, or state constraints..." class="flex-1 bg-archival-bg arch-border rounded px-3 py-2 text-xs font-mono text-archival-ink focus:outline-none focus:border-archival-ink">
+              <button type="submit" class="px-4 py-2 rounded bg-obsidian-900 hover:bg-obsidian-800 text-archival-cream text-xs font-mono font-bold transition flex items-center space-x-1.5">
+                <i class="fa-solid fa-paper-plane text-xs"></i>
+                <span>Send</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- =============================================================== -->
+      <!-- VIEW 4: CONNECTORS & MCP (Live Connectors & 7 FastMCP Tools)    -->
+      <!-- =============================================================== -->
+      <div id="view-connectors" class="flex-1 flex flex-col overflow-y-auto custom-scroll p-6 space-y-6 hidden">
+        <div class="space-y-1">
+          <h2 class="font-display text-xl font-bold text-archival-ink">INFRASTRUCTURE & SCANNER CONNECTORS</h2>
+          <p class="text-xs font-mono text-archival-muted">Live bridge connections between FalkorDB, container CNI dataplanes, and CSPM posture feeds.</p>
+        </div>
+
+        <!-- Connectors Grid -->
+        <div class="grid grid-cols-4 gap-4 font-mono text-xs">
+          <div class="p-4 bg-archival-surface arch-border rounded space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-archival-ink">FalkorDB Engine</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald font-bold">127.0.0.1:6380</span>
+            </div>
+            <p class="text-[10px] text-archival-muted">Dual-Layer Graph Store: Inventory & Exploit Plane.</p>
+            <div class="text-[9px] text-wiz-emerald font-bold">● CONNECTED (Latency 1.2ms)</div>
+          </div>
+
+          <div class="p-4 bg-archival-surface arch-border rounded space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-archival-ink">Kubernetes kind</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald font-bold">fjord-t0</span>
+            </div>
+            <p class="text-[10px] text-archival-muted">Live Calico CNI Dataplane Enforcement Verified.</p>
+            <div class="text-[9px] text-wiz-emerald font-bold">● CONNECTED (Calico v3.28)</div>
+          </div>
+
+          <div class="p-4 bg-archival-surface arch-border rounded space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-archival-ink">Trivy Vulnerabilities</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-wiz-ochreBg text-wiz-ochre font-bold">CVE-2023-38606</span>
+            </div>
+            <p class="text-[10px] text-archival-muted">Container image vulnerability feed ingested.</p>
+            <div class="text-[9px] text-wiz-emerald font-bold">● INGESTED (30 Findings)</div>
+          </div>
+
+          <div class="p-4 bg-archival-surface arch-border rounded space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-archival-ink">kubeconform Schema</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald font-bold">v0.6.7</span>
+            </div>
+            <p class="text-[10px] text-archival-muted">Rigorous offline validation for generated manifests.</p>
+            <div class="text-[9px] text-wiz-emerald font-bold">● ACTIVE (0 Schema Errors)</div>
+          </div>
+        </div>
+
+        <!-- 7 FastMCP Certified Tools Directory -->
+        <div class="space-y-3 pt-2">
+          <div class="flex items-center justify-between">
+            <h3 class="font-display text-sm font-bold text-archival-ink uppercase tracking-wider">
+              7 CERTIFIED FASTMCP MODEL TOOLS (GUARDRAILED & QUOTA-ENFORCED)
+            </h3>
+            <span class="text-[10px] font-mono text-archival-muted">Max 5 calls/turn · &lt;untrusted_data&gt; isolated</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 font-mono text-xs">
+            <div class="p-3 bg-archival-surface arch-border rounded space-y-1">
+              <div class="font-bold text-wiz-blue flex items-center justify-between">
+                <span>1. get_posture_and_cluster_summary</span>
+                <button onclick="testTool('get_posture_and_cluster_summary')" class="px-2 py-0.5 rounded arch-border bg-archival-stone text-[9px] hover:bg-archival-border">Test Tool</button>
+              </div>
+              <p class="text-[10px] text-archival-muted">Retrieve Layer 1 cluster topology inventory and posture findings summary.</p>
+            </div>
+
+            <div class="p-3 bg-archival-surface arch-border rounded space-y-1">
+              <div class="font-bold text-wiz-blue flex items-center justify-between">
+                <span>2. discover_attack_paths</span>
+                <button onclick="testTool('discover_attack_paths')" class="px-2 py-0.5 rounded arch-border bg-archival-stone text-[9px] hover:bg-archival-border">Test Tool</button>
+              </div>
+              <p class="text-[10px] text-archival-muted">Enumerate active multi-hop attack paths from :VirtualSource to :VirtualSink via algo.SPpaths.</p>
+            </div>
+
+            <div class="p-3 bg-archival-surface arch-border rounded space-y-1">
+              <div class="font-bold text-wiz-blue flex items-center justify-between">
+                <span>3. compute_optimal_remediations</span>
+                <button onclick="testTool('compute_optimal_remediations')" class="px-2 py-0.5 rounded arch-border bg-archival-stone text-[9px] hover:bg-archival-border">Test Tool</button>
+              </div>
+              <p class="text-[10px] text-archival-muted">Solve minimal hitting-set with scipy.optimize.milp preserving required flows.</p>
+            </div>
+
+            <div class="p-3 bg-archival-surface arch-border rounded space-y-1">
+              <div class="font-bold text-wiz-blue flex items-center justify-between">
+                <span>4. inspect_resource_context</span>
+                <button onclick="testTool('inspect_resource_context')" class="px-2 py-0.5 rounded arch-border bg-archival-stone text-[9px] hover:bg-archival-border">Test Tool</button>
+              </div>
+              <p class="text-[10px] text-archival-muted">Inspect security context, CVEs, and blast radius for a given resource.</p>
+            </div>
+
+            <div class="p-3 bg-archival-surface arch-border rounded space-y-1">
+              <div class="font-bold text-wiz-blue flex items-center justify-between">
+                <span>5. update_dependency_or_constraint</span>
+                <button onclick="testTool('update_dependency_or_constraint')" class="px-2 py-0.5 rounded arch-border bg-archival-stone text-[9px] hover:bg-archival-border">Test Tool</button>
+              </div>
+              <p class="text-[10px] text-archival-muted">Inject operator freeze constraint verified with AST quote checking.</p>
+            </div>
+
+            <div class="p-3 bg-archival-surface arch-border rounded space-y-1">
+              <div class="font-bold text-wiz-blue flex items-center justify-between">
+                <span>6. simulate_fix_in_sandbox</span>
+                <button onclick="testTool('simulate_fix_in_sandbox')" class="px-2 py-0.5 rounded arch-border bg-archival-stone text-[9px] hover:bg-archival-border">Test Tool</button>
+              </div>
+              <p class="text-[10px] text-archival-muted">Simulate candidate in GRAPH.COPY clone; prove 0 surviving paths & 0 broken flows.</p>
+            </div>
+
+            <div class="p-3 bg-archival-surface arch-border rounded space-y-1 col-span-2">
+              <div class="font-bold text-wiz-emerald flex items-center justify-between">
+                <span>7. commit_verified_remediation</span>
+                <span class="text-[9px] px-1.5 py-0.5 rounded bg-wiz-crimsonBg text-wiz-crimson font-bold">UI-Token Protected Gate</span>
+              </div>
+              <p class="text-[10px] text-archival-muted">Commit remediation after operator approval. Enforces prior successful sandbox run.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =============================================================== -->
+      <!-- VIEW 5: SETTINGS & API (Gemini API Key, Models & Sentinel Memory) -->
+      <!-- =============================================================== -->
+      <div id="view-settings" class="flex-1 flex flex-col overflow-y-auto custom-scroll p-6 space-y-6 hidden">
+        <div class="space-y-1">
+          <h2 class="font-display text-xl font-bold text-archival-ink">SETTINGS & LLM CONFIGURATION</h2>
+          <p class="text-xs font-mono text-archival-muted">Configure Google Gemini API credentials, thinking levels, and persistent sentinel memory.</p>
+        </div>
+
+        <div class="max-w-2xl bg-archival-surface arch-border rounded p-5 space-y-4 font-mono text-xs">
+          <div>
+            <label class="block font-bold text-archival-ink mb-1">Google Gemini API Key (BYOK)</label>
+            <div class="flex space-x-2">
+              <input type="password" id="settings-api-key" placeholder="AIzaSy..." class="flex-1 bg-archival-bg arch-border rounded px-3 py-2 text-xs font-mono text-archival-ink focus:outline-none focus:border-archival-ink">
+              <button onclick="saveAndVerifyKey()" class="px-4 py-2 rounded bg-obsidian-900 text-archival-cream font-bold">
+                Save & Verify Key
+              </button>
+            </div>
+            <div id="settings-key-status" class="mt-1 text-[10px] text-archival-muted">Key stored securely in browser localStorage.</div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 pt-2">
+            <div>
+              <label class="block font-bold text-archival-ink mb-1">Primary LLM Model</label>
+              <select id="settings-model" class="w-full bg-archival-bg arch-border rounded px-3 py-2 text-xs font-mono text-archival-ink">
+                <option value="gemini-3.8-flash">gemini-3.8-flash (Primary)</option>
+                <option value="gemini-3.6-flash">gemini-3.6-flash (Fallback)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-archival-ink mb-1">Explicit Thinking Level</label>
+              <select id="settings-thinking" class="w-full bg-archival-bg arch-border rounded px-3 py-2 text-xs font-mono text-archival-ink">
+                <option value="MEDIUM">Level 2 (Medium - Recommended)</option>
+                <option value="HIGH">Level 3 (High - Deep Reasoning)</option>
+                <option value="LOW">Level 1 (Low - Fast)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="pt-2 arch-border-t">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <div class="font-bold text-archival-ink">Sentinel Memory (Operator Vetoes)</div>
+                <div class="text-[10px] text-archival-muted">Persistent cross-ingest operator decisions in FalkorDB sentinel_memory graph.</div>
+              </div>
+              <button onclick="clearSentinelMemory()" class="px-3 py-1.5 rounded arch-border bg-archival-stone hover:bg-wiz-crimsonBg hover:text-wiz-crimson text-archival-ink text-[10px] font-bold transition">
+                Clear Test Vetoes
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ================================================================= -->
+    <!-- RIGHT RECORD INSPECTOR DRAWER: Warm Stone (#ECE7DC, 360px fixed)  -->
+    <!-- ================================================================= -->
+    <aside class="w-[360px] bg-archival-stone arch-border-l flex flex-col shrink-0 text-archival-ink z-20">
+      
+      <!-- Top Inspector Header with CSS Barcode Graphic -->
+      <div class="p-3.5 arch-border-b bg-archival-surface space-y-2">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-[9px] font-mono text-archival-muted uppercase tracking-wider">RECORD INSPECTOR</div>
+            <div id="inspector-record-id" class="font-display font-bold text-sm tracking-wide text-archival-ink">
+              REC-CJ-001
+            </div>
+          </div>
+          <!-- Real CSS Barcode Graphic -->
+          <div class="flex flex-col items-end">
+            <div class="css-barcode">
+              <span style="width: 2px;"></span><span style="width: 3px;"></span><span style="width: 1px;"></span>
+              <span style="width: 4px;"></span><span style="width: 2px;"></span><span style="width: 1px;"></span>
+              <span style="width: 3px;"></span><span style="width: 2px;"></span><span style="width: 4px;"></span>
+              <span style="width: 1px;"></span><span style="width: 3px;"></span><span style="width: 2px;"></span>
+            </div>
+            <span class="text-[7px] font-mono tracking-widest text-archival-muted">FJORD-REC-01</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[10px] font-mono">
+          <span class="px-1.5 py-0.5 rounded bg-archival-stone arch-border text-archival-muted">
+            TYPE: <strong id="inspector-type" class="text-archival-ink">CrownJewel</strong>
+          </span>
+          <span id="inspector-status-badge" class="px-1.5 py-0.5 rounded bg-wiz-crimsonBg text-wiz-crimson font-bold">
+            BREACH TARGET
+          </span>
+        </div>
+      </div>
+
+      <!-- Tabbed Navigation (DETAILS, YAML PATCH, CYPHER, AUDIT) -->
+      <div class="grid grid-cols-4 arch-border-b bg-archival-surface text-[10px] font-mono text-center">
+        <button onclick="setInspectorTab('details')" id="tab-btn-details" class="py-2 font-bold arch-border-b-2 border-archival-ink text-archival-ink">
+          DETAILS
+        </button>
+        <button onclick="setInspectorTab('yaml')" id="tab-btn-yaml" class="py-2 text-archival-muted hover:text-archival-ink transition">
+          YAML
+        </button>
+        <button onclick="setInspectorTab('cypher')" id="tab-btn-cypher" class="py-2 text-archival-muted hover:text-archival-ink transition">
+          CYPHER
+        </button>
+        <button onclick="setInspectorTab('audit')" id="tab-btn-audit" class="py-2 text-archival-muted hover:text-archival-ink transition">
+          AUDIT
         </button>
       </div>
 
-      <!-- Operator Chatbot Section (Real-Time Interactive AI Console) -->
-      <div class="flex-1 flex flex-col min-h-0 border-b border-fjord-700">
-        <div class="px-3 py-2 bg-fjord-800 border-b border-fjord-700 flex justify-between items-center shrink-0">
-          <div class="flex items-center space-x-2">
-            <i class="fa-solid fa-robot text-cyan-400 text-xs"></i>
-            <span class="text-xs font-bold text-gray-200 tracking-wide">Fjord Agent Console</span>
-          </div>
-          <span class="text-[9px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
-            Gemini 3.8 Flash
-          </span>
-        </div>
-
-        <!-- Quick Question / Directive Chips -->
-        <div class="px-3 py-1.5 bg-fjord-900/40 border-b border-fjord-700/50 flex space-x-1.5 overflow-x-auto custom-scroll text-[10px] font-mono shrink-0">
-          <button onclick="setChatQuery('Explain the attack path from the internet to the crown jewel.')" class="px-2 py-0.5 rounded bg-fjord-750 hover:bg-fjord-700 text-cyan-300 border border-cyan-900 shrink-0">
-            Explain Attack Path
-          </button>
-          <button onclick="setChatQuery('We have a deployment freeze on api-service, find an alternative remediation.')" class="px-2 py-0.5 rounded bg-fjord-750 hover:bg-fjord-700 text-amber-300 border border-amber-900 shrink-0">
-            Freeze api-service
-          </button>
-          <button onclick="setChatQuery('What is the cluster security posture and CVE breakdown?')" class="px-2 py-0.5 rounded bg-fjord-750 hover:bg-fjord-700 text-gray-300 border border-fjord-600 shrink-0">
-            Posture Summary
-          </button>
-        </div>
-
-        <!-- Chat History Window -->
-        <div id="chat-history" class="flex-1 p-3 overflow-y-auto custom-scroll space-y-3 font-sans text-xs">
-          <!-- Welcome bubble -->
-          <div class="chat-bubble-agent p-3 rounded-lg text-gray-300 space-y-1.5">
-            <div class="flex items-center space-x-1.5 text-cyan-400 font-bold text-[11px]">
-              <i class="fa-solid fa-shield-halved"></i>
-              <span>Fjord Security Agent</span>
+      <!-- Tab 1: DETAILS Content -->
+      <div id="inspector-tab-details" class="flex-1 p-3.5 overflow-y-auto custom-scroll space-y-3 font-mono text-xs">
+        <div>
+          <div class="text-[9px] uppercase tracking-wider text-archival-muted font-bold mb-1">RESOURCE ATTRIBUTES</div>
+          <div id="inspector-attributes" class="bg-archival-surface arch-border rounded p-2.5 text-[11px] space-y-1">
+            <div class="flex justify-between py-0.5 border-b border-archival-border/60">
+              <span class="text-archival-muted">name:</span><span class="font-bold text-archival-ink">crown-jewel-db</span>
             </div>
-            <p>Ready. I am monitoring the FalkorDB cluster topology. Ask me to <strong>explain attack paths</strong>, inspect CVEs, or issue natural language constraints like <em>"We have a deployment freeze on api-service"</em>.</p>
+            <div class="flex justify-between py-0.5 border-b border-archival-border/60">
+              <span class="text-archival-muted">namespace:</span><span class="text-archival-ink">fjord-t0</span>
+            </div>
+            <div class="flex justify-between py-0.5 border-b border-archival-border/60">
+              <span class="text-archival-muted">category:</span><span class="text-wiz-emerald font-bold">K8S_SECRET</span>
+            </div>
+            <div class="flex justify-between py-0.5">
+              <span class="text-archival-muted">blast_radius:</span><span class="text-wiz-crimson font-bold">CRITICAL (Cluster Secret)</span>
+            </div>
           </div>
         </div>
 
-        <!-- Chat Input Form -->
-        <div class="p-2.5 bg-fjord-900 border-t border-fjord-700 shrink-0">
-          <form onsubmit="handleChatSubmit(event)" class="flex space-x-2">
-            <input type="text" id="chat-input" placeholder="Ask Fjord about attack paths, explain fixes, or state constraints..." class="flex-1 bg-fjord-850 border border-fjord-700 rounded px-3 py-2 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-cyan-500 font-mono">
-            <button type="submit" id="btn-send-chat" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded text-xs font-semibold shadow transition flex items-center justify-center">
-              <i class="fa-solid fa-paper-plane"></i>
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <!-- Live FastMCP Flight Trace -->
-      <div class="h-44 flex flex-col shrink-0 bg-fjord-950">
-        <div class="px-3 py-1.5 bg-fjord-800 border-b border-fjord-700 flex justify-between items-center">
-          <span class="text-[10px] font-mono uppercase text-gray-400 font-semibold tracking-wider flex items-center">
-            <i class="fa-solid fa-bolt-lightning text-amber-400 mr-1.5"></i> FastMCP Flight Trace
-          </span>
-          <span id="trace-counter" class="text-[9px] font-mono text-cyan-400">0 events</span>
-        </div>
-        <div id="trace-log" class="flex-1 p-2.5 overflow-y-auto custom-scroll font-mono text-[10px] space-y-1 text-gray-400">
-          <div class="text-gray-600 italic">FastMCP events stream here in real time with ms latency...</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================================================================= -->
-    <!-- PANE 2: Center Pane (Interactive FalkorDB Topology Canvas & Cypher) -->
-    <!-- ================================================================= -->
-    <section class="flex-1 flex flex-col bg-fjord-900 relative min-w-0">
-      <!-- Floating Top Canvas Bar -->
-      <div class="absolute top-3 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
-        <div class="flex items-center space-x-2 bg-fjord-850/90 backdrop-blur px-3 py-1.5 rounded-lg border border-fjord-700 text-xs font-mono shadow-lg pointer-events-auto">
-          <span class="text-gray-400">Active Graph:</span>
-          <span id="active-graph-name" class="font-bold text-cyan-400">prod_cluster</span>
-          <span class="text-gray-600">|</span>
-          <span id="active-paths-badge" class="px-2 py-0.5 rounded bg-red-950 text-red-400 border border-red-800 text-[10px] font-bold">
-            Breach Paths: 1 (CRIMSON)
-          </span>
-          <span class="text-gray-600">|</span>
-          <span id="graph-stats" class="text-[10px] text-gray-400">0 nodes, 0 edges</span>
-        </div>
-
-        <div class="flex items-center space-x-2 pointer-events-auto">
-          <button onclick="fitGraph()" class="bg-fjord-850/90 hover:bg-fjord-750 text-cyan-400 border border-fjord-700 px-2.5 py-1.5 rounded-lg text-xs font-mono shadow flex items-center space-x-1">
-            <i class="fa-solid fa-expand mr-1"></i><span>Fit Canvas</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Floating Bottom Legend -->
-      <div class="absolute bottom-4 left-4 z-10 bg-fjord-850/90 backdrop-blur p-2.5 rounded-lg border border-fjord-700 text-[10px] font-mono space-y-1 shadow-lg pointer-events-auto hidden md:block">
-        <div class="font-bold text-gray-400 uppercase tracking-wider mb-1 text-[9px]">Topology Legend</div>
-        <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded bg-blue-500 inline-block"></span><span>Workload (Pod/Deployment)</span></div>
-        <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rotate-45 bg-amber-400 inline-block"></span><span>PostureFinding (CVE)</span></div>
-        <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block"></span><span>IAM / ServiceAccount</span></div>
-        <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded bg-emerald-500 inline-block"></span><span>CrownJewel (Secret/DB)</span></div>
-        <div class="flex items-center space-x-2"><span class="w-2.5 h-0.5 bg-red-500 inline-block"></span><span class="text-red-400 font-semibold">Active Breach Edge (:EXPLOIT_STEP)</span></div>
-        <div class="flex items-center space-x-2"><span class="w-2.5 h-0.5 border-t border-dashed border-gray-400 inline-block"></span><span class="text-gray-400">Severed Edge [DASHED]</span></div>
-      </div>
-
-      <!-- Real Graph Canvas Container (Vis.js renders here) -->
-      <div class="flex-1 relative w-full h-full min-h-[300px]">
-        <div id="topology-canvas"></div>
-      </div>
-
-      <!-- In-Graph FalkorDB Cypher & Native Execution Inspector -->
-      <div class="h-48 border-t border-fjord-700 bg-fjord-950 flex flex-col shrink-0 z-10">
-        <div class="px-4 py-2 bg-fjord-850 border-b border-fjord-700 flex justify-between items-center">
-          <div class="flex items-center space-x-2">
-            <i class="fa-solid fa-terminal text-emerald-400 text-xs"></i>
-            <span class="text-xs font-bold text-gray-200 uppercase font-mono tracking-wide">In-Graph FalkorDB Cypher Inspector</span>
-          </div>
-          <div class="flex items-center space-x-2">
-            <span class="text-[10px] font-mono text-gray-400">Live Engine: 127.0.0.1:6380</span>
-            <button onclick="refreshCypherLogs()" class="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono px-2 py-0.5 rounded bg-fjord-750">
-              <i class="fa-solid fa-arrows-rotate mr-1"></i>Refresh
-            </button>
+        <div>
+          <div class="text-[9px] uppercase tracking-wider text-archival-muted font-bold mb-1">EXPLAINABLE PATH PROOF</div>
+          <div id="breadcrumb-chain" class="bg-archival-surface arch-border rounded p-2.5 text-[10px] space-y-1 text-archival-ink">
+            <div class="text-wiz-crimson font-bold flex items-center">
+              <i class="fa-solid fa-triangle-exclamation mr-1"></i> Active Shortest Breach Path:
+            </div>
+            <div class="text-archival-ink leading-relaxed">
+              (:VirtualSource) &rarr; ingress-gw &rarr; ingress-proxy &rarr; api-service &rarr; crown-jewel-db &rarr; (:VirtualSink)
+            </div>
           </div>
         </div>
-        <div id="cypher-log-container" class="flex-1 p-3 overflow-y-auto custom-scroll font-mono text-[11px] space-y-2">
-          <!-- Cypher queries populate dynamically -->
-          <div class="text-gray-500 italic">No queries executed yet. Loading cluster Cypher traces...</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================================================================= -->
-    <!-- PANE 3: Right Pane (Node Inspector, Path Proof & Operator Gate)     -->
-    <!-- ================================================================= -->
-    <section class="w-96 border-l border-fjord-700 bg-fjord-850 flex flex-col shrink-0">
-      <!-- Active Node Inspector (Populates on clicking any node) -->
-      <div class="p-3.5 border-b border-fjord-700 bg-fjord-900/40 shrink-0">
-        <h2 class="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
-          <span class="flex items-center"><i class="fa-solid fa-circle-info text-cyan-400 mr-1.5"></i>Node Inspector</span>
-          <span id="inspect-label" class="text-[10px] font-mono px-2 py-0.5 rounded bg-fjord-700 text-cyan-300">Click a Node</span>
-        </h2>
-        <div id="inspect-content" class="mt-2 p-2.5 bg-fjord-900 rounded border border-fjord-700 font-mono text-[11px] space-y-1">
-          <div class="text-gray-400 italic text-[10px]">Click any node in the topology canvas to inspect properties, CVE attributes, and reachability.</div>
-        </div>
       </div>
 
-      <!-- Explainable Path Proof -->
-      <div class="p-3.5 border-b border-fjord-700 shrink-0">
-        <h2 class="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
-          <span class="flex items-center"><i class="fa-solid fa-route text-amber-400 mr-1.5"></i>Explainable Path Proof</span>
-          <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-fjord-750 text-gray-400 border border-fjord-700">algo.SPpaths</span>
-        </h2>
-        <div id="breadcrumb-chain" class="mt-2 p-2.5 bg-fjord-900 rounded border border-fjord-700 font-mono text-[10px] space-y-1 text-gray-300">
-          <div class="text-red-400 font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Active Shortest Breach Path:</div>
-          <div class="text-gray-300 break-words">(:VirtualSource) &rarr; ingress-gw &rarr; ingress-proxy &rarr; api-service &rarr; crown-jewel-db &rarr; (:VirtualSink)</div>
-        </div>
-      </div>
-
-      <!-- Remediation YAML Diff (Synthesized NetworkPolicy) -->
-      <div class="flex-1 p-3.5 flex flex-col min-h-0 border-b border-fjord-700">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center">
-            <i class="fa-solid fa-file-code text-cyan-400 mr-1.5"></i>Synthesized K8s Patch
-          </span>
-          <button onclick="copyPatchYaml()" class="text-[10px] font-mono px-2 py-1 bg-fjord-750 hover:bg-fjord-700 rounded text-cyan-400 border border-cyan-800 transition">
+      <!-- Tab 2: YAML PATCH Content -->
+      <div id="inspector-tab-yaml" class="flex-1 p-3.5 flex flex-col min-h-0 space-y-2 hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-[9px] font-mono uppercase tracking-wider text-archival-muted font-bold">SYNTHESIZED K8S PATCH</span>
+          <button onclick="copyPatchYaml()" class="text-[10px] font-mono px-2 py-0.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink">
             <i class="fa-regular fa-copy mr-1"></i>Copy YAML
           </button>
         </div>
-        <textarea id="patch-yaml" readonly class="flex-1 w-full bg-fjord-900 border border-fjord-700 rounded p-2.5 font-mono text-[10px] text-emerald-400 resize-none focus:outline-none custom-scroll"># Synthesized minimal-diff NetworkPolicy will appear here after solver execution</textarea>
+        <textarea id="patch-yaml" readonly class="flex-1 w-full bg-archival-surface arch-border rounded p-2.5 font-mono text-[10px] text-wiz-emerald resize-none focus:outline-none custom-scroll"># Synthesized minimal-diff NetworkPolicy will appear here after solver execution</textarea>
       </div>
 
-      <!-- Static Template-Rendered Operator Approval Gate -->
-      <div class="p-3.5 bg-fjord-900/90 space-y-3 shrink-0">
+      <!-- Tab 3: CYPHER Content (In-Graph FalkorDB Cypher Inspector) -->
+      <div id="inspector-tab-cypher" class="flex-1 p-3.5 overflow-y-auto custom-scroll space-y-2.5 hidden font-mono text-xs">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-gray-200 uppercase tracking-wide">Operator Review Gate</span>
-          <span id="gate-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">
-            AWAITING SOLVER
-          </span>
+          <span class="text-[9px] uppercase tracking-wider text-archival-muted font-bold">FALKORDB CYPHER QUERIES</span>
+          <span class="text-[9px] text-wiz-emerald font-bold">algo.SPpaths</span>
         </div>
-        <div class="bg-fjord-950 p-2.5 rounded border border-fjord-700 text-[11px] font-mono space-y-1">
-          <div class="text-gray-400">Candidate Set ID: <span id="op-cset-id" class="text-cyan-400">-</span></div>
-          <div class="text-gray-400">Disruption Cost: <span id="op-cost" class="text-emerald-400">1.0</span></div>
-          <div class="text-gray-400">Broken Required Flows: <span id="op-broken" class="text-emerald-400">0</span></div>
-          <div class="text-gray-400">Verification Gate: <span id="op-status" class="text-gray-500 font-semibold">PENDING</span></div>
+        <div id="inspector-cypher-list" class="space-y-2">
+          <!-- Live Cypher queries dynamically populated -->
         </div>
-        <div class="flex space-x-2 pt-1">
-          <button onclick="sendOperatorDecision('APPROVE')" id="btn-approve" disabled class="flex-1 bg-emerald-600/50 text-emerald-200 font-bold text-xs py-2 rounded transition cursor-not-allowed">
-            <i class="fa-solid fa-check mr-1.5"></i>APPROVE & COMMIT
+      </div>
+
+      <!-- Tab 4: AUDIT Content (Operator Review Gate) -->
+      <div id="inspector-tab-audit" class="flex-1 p-3.5 space-y-3 hidden font-mono text-xs">
+        <div class="text-[9px] uppercase tracking-wider text-archival-muted font-bold">OPERATOR REVIEW GATE</div>
+        <div class="bg-archival-surface arch-border rounded p-2.5 text-[11px] space-y-1.5">
+          <div class="flex justify-between border-b border-archival-border/60 pb-1">
+            <span class="text-archival-muted">Candidate Set:</span>
+            <span id="op-cset-id" class="font-bold text-archival-ink">-</span>
+          </div>
+          <div class="flex justify-between border-b border-archival-border/60 pb-1">
+            <span class="text-archival-muted">Disruption Cost:</span>
+            <span id="op-cost" class="font-bold text-wiz-emerald">1.0</span>
+          </div>
+          <div class="flex justify-between border-b border-archival-border/60 pb-1">
+            <span class="text-archival-muted">Broken Required Flows:</span>
+            <span id="op-broken" class="font-bold text-wiz-emerald">0</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-archival-muted">Verification Gate:</span>
+            <span id="op-status" class="font-bold text-wiz-emerald">VERIFIED_IN_MODEL</span>
+          </div>
+        </div>
+
+        <div class="space-y-2 pt-2">
+          <button onclick="sendOperatorDecision('APPROVE')" id="btn-approve" class="w-full py-2.5 rounded bg-wiz-emerald hover:bg-emerald-700 text-white font-mono font-bold text-xs transition shadow flex items-center justify-center space-x-1.5">
+            <i class="fa-solid fa-check"></i>
+            <span>APPROVE & COMMIT TO PRODUCTION</span>
           </button>
-          <button onclick="sendOperatorDecision('REJECT')" id="btn-reject" disabled class="px-4 bg-red-950 hover:bg-red-900 text-red-400 border border-red-800 font-bold text-xs py-2 rounded transition cursor-not-allowed">
-            <i class="fa-solid fa-xmark"></i>
+          <button onclick="sendOperatorDecision('REJECT')" id="btn-reject" class="w-full py-2 rounded arch-border bg-archival-surface hover:bg-wiz-crimsonBg hover:text-wiz-crimson text-archival-muted font-mono font-bold text-xs transition">
+            REJECT (VETO IN SENTINEL MEMORY)
           </button>
         </div>
       </div>
-    </section>
-  </main>
 
-  <!-- ================================================================= -->
-  <!-- CLIENT JAVASCRIPT LOGIC                                           -->
-  <!-- ================================================================= -->
+    </aside>
+
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- BOTTOM STATUS BAR: Deep Obsidian Charcoal (#141517, 32px fixed)    -->
+  <!-- =================================================================== -->
+  <footer class="h-8 bg-obsidian-950 border-t border-obsidian-border px-4 flex items-center justify-between text-[10px] font-mono text-archival-faint shrink-0 z-30">
+    <div class="flex items-center space-x-4">
+      <span class="flex items-center"><span class="w-1.5 h-1.5 rounded-full bg-wiz-emerald inline-block mr-1.5"></span>FALKORDB: ONLINE (:6380)</span>
+      <span>|</span>
+      <span>ACTIVE GRAPH: <strong id="status-graph-name" class="text-archival-cream">prod_t0slice</strong></span>
+      <span>|</span>
+      <span>CNI: CALICO (K8s)</span>
+      <span>|</span>
+      <span>GEMINI: <strong id="status-llm-model" class="text-wiz-emerald">READY (gemini-3.8-flash)</strong></span>
+    </div>
+    <div class="flex items-center space-x-3">
+      <span id="status-active-view">VIEW: DASHBOARD</span>
+      <span>|</span>
+      <span class="text-archival-cream font-bold">PROJECT FJORD // TRACK 1</span>
+    </div>
+  </footer>
+
+  <!-- =================================================================== -->
+  <!-- CLIENT JAVASCRIPT: Full Multi-View Application Logic               -->
+  <!-- =================================================================== -->
   <script>
     let currentSession = null;
-    let networkCanvas = null;
-    let eventSource = null;
-    let currentTopology = { nodes: [], edges: [] };
-    let currentViewMode = 'prod';
+    let cyInstance = null;
+    let fullCyInstance = null;
+    let currentView = 'dashboard';
+    let currentGraphMode = 'prod';
 
-    // 1. Session Initialization
-    async function initSession() {
-      const scenario = document.getElementById('scenario-select').value;
-      const byok = document.getElementById('byok-input').value;
+    // 1. Initial Application Setup
+    window.addEventListener('DOMContentLoaded', async () => {
+      // Load saved API key from localStorage if present
+      const savedKey = localStorage.getItem('fjord_gemini_api_key');
+      if (savedKey) {
+        document.getElementById('settings-api-key').value = savedKey;
+        document.getElementById('settings-key-status').innerHTML = '<span class="text-wiz-emerald font-bold">● Active key restored from localStorage.</span>';
+      }
+      await initSession('sample_cluster');
+    });
 
+    async function initSession(scenarioId = 'sample_cluster') {
       try {
+        const apiKey = localStorage.getItem('fjord_gemini_api_key') || null;
         const resp = await fetch('/api/v1/sessions/init', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({scenario: scenario, byok_api_key: byok || null, replay_mode: !byok})
+          body: JSON.stringify({
+            scenario: scenarioId,
+            byok_api_key: apiKey,
+            replay_mode: true
+          })
         });
         currentSession = await resp.json();
-        document.getElementById('header-sess-id').innerText = currentSession.session_id.substring(0, 15);
-        document.getElementById('active-graph-name').innerText = currentSession.snapshot_sha;
-        setupSSE(currentSession.session_id);
-        await loadTopology(currentSession.snapshot_sha);
-        await refreshCypherLogs();
-      } catch (e) {
-        console.error('Session init error:', e);
+        
+        document.getElementById('dash-active-scenario').innerText = scenarioId;
+        document.getElementById('status-graph-name').innerText = currentSession.snapshot_sha;
+        
+        await loadCytoscapeGraph(currentSession.session_id, 'prod');
+        await refreshCypherInspector();
+      } catch (err) {
+        console.error('Session init failed:', err);
       }
     }
 
-    // 2. Server-Sent Events (SSE) Stream
-    function setupSSE(sessionId) {
-      if (eventSource) eventSource.close();
-      eventSource = new EventSource(`/api/v1/sessions/${sessionId}/stream`);
-      
-      eventSource.addEventListener('tool_call', (e) => {
-        const data = JSON.parse(e.data);
-        appendTraceLog(`[${data.data.latency_ms} ms] TOOL: ${data.data.tool}`, 'text-cyan-400');
-        refreshCypherLogs();
-      });
-      
-      eventSource.addEventListener('sandbox_sim', (e) => {
-        const data = JSON.parse(e.data);
-        appendTraceLog(`[${data.data.latency_ms} ms] SANDBOX: GRAPH.COPY verified -> 0 paths surviving`, 'text-emerald-400 font-semibold');
-        refreshCypherLogs();
-      });
-
-      eventSource.addEventListener('agent_thought', (e) => {
-        const data = JSON.parse(e.data);
-        appendTraceLog(`[THOUGHT] ${data.data.thought}`, 'text-gray-400 italic');
-      });
-
-      eventSource.addEventListener('commit_remediation', (e) => {
-        appendTraceLog(`[VERIFIED COMMIT] Remediation committed to sentinel_memory`, 'text-emerald-300 font-bold');
-      });
-    }
-
-    function appendTraceLog(text, colorClass) {
-      const log = document.getElementById('trace-log');
-      const item = document.createElement('div');
-      item.className = `${colorClass} py-0.5 border-b border-fjord-800/40 text-[10px]`;
-      item.innerText = text;
-      log.appendChild(item);
-      log.scrollTop = log.scrollHeight;
-      
-      const count = log.children.length;
-      document.getElementById('trace-counter').innerText = `${count} events`;
-    }
-
-    // 3. Topology Loading with Vis.js (Zero Blank Box)
-    async function loadTopology(graphName) {
-      try {
-        const res = await fetch(`/api/v1/graph/${graphName}`);
-        const data = await res.json();
-        currentTopology = data;
-
-        const isSandbox = graphName.startsWith('sandbox_sim');
-        const pathCount = data.attack_path_count;
-        const badge = document.getElementById('active-paths-badge');
-        
-        if (isSandbox || pathCount === 0) {
-          badge.className = 'px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold';
-          badge.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i>Breach Paths: 0 (VERIFIED)';
+    // 2. View Switching Logic
+    function switchView(viewName) {
+      currentView = viewName;
+      const views = ['dashboard', 'graph', 'copilot', 'connectors', 'settings'];
+      views.forEach(v => {
+        const el = document.getElementById(`view-${v}`);
+        const nav = document.getElementById(`nav-${v}`);
+        if (v === viewName) {
+          el.classList.remove('hidden');
+          nav.className = 'w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition nav-item-active';
         } else {
-          badge.className = 'px-2 py-0.5 rounded bg-red-950 text-red-400 border border-red-800 text-[10px] font-bold';
-          badge.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i>Breach Paths: ${pathCount} (CRIMSON)`;
+          el.classList.add('hidden');
+          nav.className = 'w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850';
         }
+      });
+      document.getElementById('status-active-view').innerText = `VIEW: ${viewName.toUpperCase()}`;
 
-        document.getElementById('graph-stats').innerText = `${data.nodes.length} nodes, ${data.edges.length} edges`;
+      if (viewName === 'graph' && !fullCyInstance) {
+        initFullscreenGraph();
+      }
+    }
 
-        // Format nodes for Vis.js
-        const visNodes = data.nodes.map(n => {
-          let shape = n.shape || 'box';
-          let color = n.color || '#3b82f6';
-          let border = color;
-          
-          if (n.is_attack_path) {
-            border = '#ef4444';
-          }
-
-          return {
-            id: n.id,
-            label: `  ${n.name || n.id}  \n[${n.label}]`,
-            shape: shape,
-            color: {
-              background: color,
-              border: border,
-              highlight: { background: color, border: '#ffffff' },
-              hover: { background: color, border: '#38bdf8' }
-            },
-            font: { color: '#ffffff', size: 10, face: 'monospace' },
-            shadow: n.is_attack_path ? { enabled: true, color: 'rgba(239,68,68,0.7)', size: 12 } : false,
-            borderWidth: n.is_attack_path ? 3 : 1.5,
-          };
-        });
-
-        // Format edges for Vis.js
-        const visEdges = data.edges.map(e => {
-          const isCrimson = e.is_attack_path && !e.is_severed;
-          const isSevered = e.is_severed;
-
-          let edgeColor = '#334155';
-          let width = 1.5;
-          let dashes = false;
-          let label = e.label || e.type;
-
-          if (isCrimson) {
-            edgeColor = '#ef4444';
-            width = 3.5;
-          } else if (isSevered) {
-            edgeColor = '#64748b';
-            width = 1.5;
-            dashes = [6, 6];
-            label = `${label} [SEVERED]`;
-          }
-
-          return {
-            id: e.id,
-            from: e.source,
-            to: e.target,
-            label: label,
-            color: { color: edgeColor, highlight: '#38bdf8', hover: '#ffffff' },
-            width: width,
-            dashes: dashes,
-            arrows: { to: { enabled: true, scaleFactor: 0.8 } },
-            font: { color: isCrimson ? '#f87171' : '#94a3b8', size: 9, face: 'monospace', align: 'middle', background: '#070b14' },
-            smooth: { type: 'continuous', roundness: 0.15 }
-          };
-        });
-
+    // 3. Load Cytoscape.js Security Graph
+    async function loadCytoscapeGraph(sessionOrGraphId, viewMode = 'prod') {
+      try {
+        const resp = await fetch(`/api/v1/graph/${sessionOrGraphId}?view=${viewMode}`);
+        const data = await resp.json();
+        
+        // Update KPI block numerals dynamically
+        if (data.attack_path_count !== undefined) {
+          document.getElementById('kpi-paths').innerText = viewMode === 'sandbox' ? '00' : String(data.attack_path_count).padStart(2, '0');
+          document.getElementById('kpi-toxic').innerText = viewMode === 'sandbox' ? '00' : '03';
+          document.getElementById('kpi-sandbox').innerText = viewMode === 'sandbox' ? '01' : '01';
+        }
+        
+        const elements = data.cytoscape_elements || [];
         const container = document.getElementById('topology-canvas');
-        const networkData = { nodes: new vis.DataSet(visNodes), edges: new vis.DataSet(visEdges) };
-        const options = {
-          physics: {
-            stabilization: { iterations: 120 },
-            barnesHut: { gravitationalConstant: -3500, centralGravity: 0.3, springLength: 95, springConstant: 0.04 }
-          },
-          interaction: { hover: true, tooltipDelay: 100, zoomView: true, dragView: true },
-        };
-
-        if (networkCanvas) networkCanvas.destroy();
-        networkCanvas = new vis.Network(container, networkData, options);
-
-        // Click Inspector
-        networkCanvas.on('click', function(params) {
-          if (params.nodes.length > 0) {
-            const nodeId = params.nodes[0];
-            inspectNode(nodeId);
+        
+        if (cyInstance) cyInstance.destroy();
+        
+        cyInstance = cytoscape({
+          container: container,
+          elements: elements,
+          style: [
+            {
+              selector: 'node',
+              style: {
+                'background-color': 'data(color)',
+                'label': 'data(label)',
+                'font-family': 'JetBrains Mono',
+                'font-size': '10px',
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'color': '#FFFFFF',
+                'shape': 'data(shape)',
+                'width': 'label',
+                'height': '32px',
+                'padding': '10px',
+                'border-width': 1.5,
+                'border-color': '#181818',
+              }
+            },
+            {
+              selector: 'node[?is_attack_path]',
+              style: {
+                'border-color': '#C93B2B',
+                'border-width': 3,
+                'shadow-blur': 15,
+                'shadow-color': '#C93B2B',
+                'shadow-opacity': 0.6,
+              }
+            },
+            {
+              selector: 'node[node_type = "CrownJewel"]',
+              style: {
+                'background-color': '#236B48',
+                'border-color': '#181818',
+                'border-width': 2,
+                'height': '40px',
+              }
+            },
+            {
+              selector: 'edge',
+              style: {
+                'width': 1.5,
+                'line-color': '#D4CFC4',
+                'target-arrow-color': '#68645C',
+                'target-arrow-shape': 'triangle',
+                'curve-style': 'bezier',
+                'label': 'data(label)',
+                'font-family': 'JetBrains Mono',
+                'font-size': '8px',
+                'color': '#68645C',
+                'text-background-color': '#FAF8F3',
+                'text-background-opacity': 0.9,
+                'text-background-padding': '2px',
+              }
+            },
+            {
+              selector: 'edge[?is_attack_path]',
+              style: {
+                'line-color': '#C93B2B',
+                'target-arrow-color': '#C93B2B',
+                'width': 3.5,
+                'color': '#C93B2B',
+                'font-weight': 'bold',
+              }
+            },
+            {
+              selector: 'edge[?is_severed]',
+              style: {
+                'line-color': '#8E8A80',
+                'target-arrow-color': '#8E8A80',
+                'line-style': 'dashed',
+                'width': 1.5,
+                'label': '[SEVERED]',
+                'color': '#8E8A80',
+              }
+            }
+          ],
+          layout: {
+            name: 'cose',
+            animate: false,
+            nodeOverlap: 20,
+            idealEdgeLength: 85,
+            edgeElasticity: 100,
           }
         });
 
-        // Fit after stabilization
-        networkCanvas.once('stabilizationIterationsDone', function() {
-          networkCanvas.fit({ animation: { duration: 600 } });
+        // Click Handler: populate Right Record Inspector
+        cyInstance.on('tap', 'node', function(evt){
+          const node = evt.target;
+          populateInspectorNode(node.data());
         });
 
-      } catch (e) {
-        console.error('Topology load error:', e);
+        cyInstance.on('tap', 'edge', function(evt){
+          const edge = evt.target;
+          populateInspectorEdge(edge.data());
+        });
+
+      } catch (err) {
+        console.error('Failed to load Cytoscape graph:', err);
       }
     }
 
     function fitGraph() {
-      if (networkCanvas) networkCanvas.fit({ animation: { duration: 400 } });
+      if (cyInstance) cyInstance.fit();
+      if (fullCyInstance) fullCyInstance.fit();
     }
 
-    // 4. Node Inspector Logic
-    function inspectNode(nodeId) {
-      const node = currentTopology.nodes.find(n => n.id === nodeId);
-      if (!node) return;
+    function setGraphLayout(layoutName) {
+      if (fullCyInstance) {
+        fullCyInstance.layout({ name: layoutName, animate: true }).run();
+      }
+    }
 
-      document.getElementById('inspect-label').innerText = `${node.label} (${node.namespace || 'default'})`;
+    function initFullscreenGraph() {
+      const container = document.getElementById('fullscreen-topology-canvas');
+      if (!cyInstance) return;
+      fullCyInstance = cytoscape({
+        container: container,
+        elements: cyInstance.elements().jsons(),
+        style: cyInstance.style(),
+        layout: { name: 'cose', animate: false }
+      });
+    }
 
-      const content = document.getElementById('inspect-content');
-      let propsHtml = '';
-      const props = node.properties || {};
+    // 4. Toggle Prod vs. Sandbox Simulation
+    function toggleGraphView(view) {
+      currentGraphMode = view;
+      const btnProd = document.getElementById('btn-toggle-prod');
+      const btnSandbox = document.getElementById('btn-toggle-sandbox');
 
-      for (const [k, v] of Object.entries(props)) {
-        if (typeof v === 'object') continue;
-        propsHtml += `<div class="flex justify-between py-0.5 border-b border-fjord-800 text-[10px]"><span class="text-gray-400 font-semibold">${k}:</span><span class="text-cyan-300 text-right font-mono">${v}</span></div>`;
+      if (view === 'sandbox') {
+        if (!currentSession || !currentSession.sandbox_sha) {
+          alert('Sandbox simulation not yet run. Click "RUN REMEDIATION AGENT" first to simulate in GRAPH.COPY.');
+          return;
+        }
+        btnSandbox.className = 'px-2.5 py-1 rounded bg-wiz-emerald text-white font-bold shadow-sm transition';
+        btnProd.className = 'px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition';
+        loadCytoscapeGraph(currentSession.session_id, 'sandbox');
+      } else {
+        btnProd.className = 'px-2.5 py-1 rounded bg-archival-surface text-archival-ink font-bold shadow-sm transition';
+        btnSandbox.className = 'px-2.5 py-1 rounded text-archival-muted hover:text-archival-ink font-semibold transition';
+        loadCytoscapeGraph(currentSession.session_id, 'prod');
+      }
+    }
+
+    // 5. Inspector Population Logic
+    function populateInspectorNode(data) {
+      document.getElementById('inspector-record-id').innerText = data.id;
+      document.getElementById('inspector-type').innerText = data.node_type || 'Workload';
+      
+      const badge = document.getElementById('inspector-status-badge');
+      if (data.is_attack_path) {
+        badge.className = 'px-1.5 py-0.5 rounded bg-wiz-crimsonBg text-wiz-crimson font-bold';
+        badge.innerText = 'ON ATTACK PATH';
+      } else {
+        badge.className = 'px-1.5 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald font-bold';
+        badge.innerText = 'ISOLATED';
       }
 
-      content.innerHTML = `
-        <div class="space-y-1.5">
-          <div class="text-xs font-bold text-white flex items-center justify-between">
-            <span>${node.name || node.id}</span>
-            <span class="px-1.5 py-0.5 text-[9px] rounded bg-cyan-950 text-cyan-400 border border-cyan-800">${node.label}</span>
-          </div>
-          <div class="text-[10px] text-gray-400">ID: <span class="text-gray-300 font-mono">${node.id}</span></div>
-          <div class="pt-1">${propsHtml || '<div class="text-gray-500 italic">No extra properties</div>'}</div>
-        </div>
+      let attrs = `<div class="flex justify-between py-0.5 border-b border-archival-border/60"><span class="text-archival-muted">id:</span><span class="font-bold text-archival-ink">${data.id}</span></div>`;
+      attrs += `<div class="flex justify-between py-0.5 border-b border-archival-border/60"><span class="text-archival-muted">label:</span><span class="font-bold text-archival-ink">${data.label}</span></div>`;
+      attrs += `<div class="flex justify-between py-0.5 border-b border-archival-border/60"><span class="text-archival-muted">namespace:</span><span class="text-archival-ink">${data.namespace || 'default'}</span></div>`;
+
+      const props = data.properties || {};
+      for (const [k, v] of Object.entries(props)) {
+        if (typeof v === 'object') continue;
+        attrs += `<div class="flex justify-between py-0.5 border-b border-archival-border/60"><span class="text-archival-muted">${k}:</span><span class="text-archival-ink font-mono">${v}</span></div>`;
+      }
+
+      document.getElementById('inspector-attributes').innerHTML = attrs;
+    }
+
+    function populateInspectorEdge(data) {
+      document.getElementById('inspector-record-id').innerText = data.id;
+      document.getElementById('inspector-type').innerText = data.type || 'EXPLOIT_STEP';
+      
+      const badge = document.getElementById('inspector-status-badge');
+      if (data.is_severed) {
+        badge.className = 'px-1.5 py-0.5 rounded bg-archival-stone text-archival-muted font-bold';
+        badge.innerText = 'SEVERED BY MILP';
+      } else if (data.is_attack_path) {
+        badge.className = 'px-1.5 py-0.5 rounded bg-wiz-crimsonBg text-wiz-crimson font-bold';
+        badge.innerText = 'ACTIVE EXPLOIT';
+      } else {
+        badge.className = 'px-1.5 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald font-bold';
+        badge.innerText = 'STANDARD';
+      }
+
+      document.getElementById('inspector-attributes').innerHTML = `
+        <div class="flex justify-between py-0.5 border-b border-archival-border/60"><span class="text-archival-muted">source:</span><span class="font-bold text-archival-ink">${data.source}</span></div>
+        <div class="flex justify-between py-0.5 border-b border-archival-border/60"><span class="text-archival-muted">target:</span><span class="font-bold text-archival-ink">${data.target}</span></div>
+        <div class="flex justify-between py-0.5"><span class="text-archival-muted">relationship:</span><span class="text-wiz-blue font-bold">${data.label}</span></div>
       `;
     }
 
-    // 5. Run Remediation Pipeline
+    function setInspectorTab(tabName) {
+      const tabs = ['details', 'yaml', 'cypher', 'audit'];
+      tabs.forEach(t => {
+        const pane = document.getElementById(`inspector-tab-${t}`);
+        const btn = document.getElementById(`tab-btn-${t}`);
+        if (t === tabName) {
+          pane.classList.remove('hidden');
+          btn.className = 'py-2 font-bold arch-border-b-2 border-archival-ink text-archival-ink';
+        } else {
+          pane.classList.add('hidden');
+          btn.className = 'py-2 text-archival-muted hover:text-archival-ink transition';
+        }
+      });
+    }
+
+    // 6. Run Full Remediation Agent Pipeline
     async function runRemediationPipeline() {
-      if (!currentSession) await initSession();
-      appendTraceLog('Dispatched remediation agent pipeline (MILP + GRAPH.COPY)...', 'text-amber-400 font-semibold');
-      
+      if (!currentSession) return;
       try {
         const resp = await fetch('/api/v1/agent/run', {
           method: 'POST',
@@ -571,82 +1193,35 @@ def get_command_center_ui():
         currentSession.candidate_set_id = res.candidate_set_id;
         currentSession.sandbox_sha = res.sandbox_sha;
 
-        // Populate Right Pane Gate
+        // Populate Audit Gate
         document.getElementById('op-cset-id').innerText = res.candidate_set_id;
         document.getElementById('op-status').innerText = 'VERIFIED_IN_MODEL';
-        document.getElementById('op-status').className = 'text-emerald-400 font-bold';
-        document.getElementById('gate-badge').innerText = 'GATE UNLOCKED';
-        document.getElementById('gate-badge').className = 'text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800';
 
-        // Unlock operator button
-        const btnApprove = document.getElementById('btn-approve');
-        btnApprove.disabled = false;
-        btnApprove.className = 'flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 rounded transition cursor-pointer shadow-lg shadow-emerald-600/30';
-
-        const btnReject = document.getElementById('btn-reject');
-        btnReject.disabled = false;
-        btnReject.className = 'px-4 bg-red-950 hover:bg-red-900 text-red-400 border border-red-800 font-bold text-xs py-2 rounded transition cursor-pointer';
-
-        // Set patch YAML
-        const remedTimeline = res.timeline.find(t => t.step === 'remediate');
-        if (remedTimeline && remedTimeline.candidates.optimal_candidates.length > 0) {
-          document.getElementById('patch-yaml').value = remedTimeline.candidates.optimal_candidates[0].yaml_diff;
+        // Extract YAML
+        const remed = res.timeline.find(t => t.step === 'remediate');
+        if (remed && remed.candidates.optimal_candidates.length > 0) {
+          document.getElementById('patch-yaml').value = remed.candidates.optimal_candidates[0].yaml_diff;
         }
 
-        // Add Agent Chat Response
-        appendChatMessage('Fjord Agent', `### Optimal Remediation Found & Verified in Sandbox\n\n- **Candidate Set:** \`${res.candidate_set_id}\`\n- **Status:** \`VERIFIED_IN_MODEL\` (0 surviving paths, 0 broken required flows)\n- **Sandbox Graph:** \`${res.sandbox_sha}\`\n\nThe synthesized NetworkPolicy YAML has been populated in the Right Pane. Switch to **[Graph: sandbox_sim]** to inspect the severed breach edge.`);
-
-        appendTraceLog('Simulation verified in GRAPH.COPY: 0 surviving attack paths.', 'text-emerald-400 font-bold');
-        await refreshCypherLogs();
-      } catch (e) {
-        console.error('Agent run error:', e);
+        // Auto switch to sandbox view to showcase severed edge
+        toggleGraphView('sandbox');
+        setInspectorTab('audit');
+      } catch (err) {
+        console.error('Pipeline execution error:', err);
       }
     }
 
-    // 6. Interactive Sandbox Toggle
-    function toggleGraphView(view) {
-      if (!currentSession) return;
-      currentViewMode = view;
-      const btnProd = document.getElementById('btn-view-prod');
-      const btnSandbox = document.getElementById('btn-view-sandbox');
-
-      if (view === 'sandbox') {
-        if (!currentSession.sandbox_sha) {
-          alert('Sandbox graph not yet created. Run the Remediation Agent or ask the Chatbot to simulate a fix first.');
-          return;
-        }
-        btnSandbox.className = 'px-3 py-1 text-xs font-mono font-semibold rounded bg-emerald-600 text-white shadow-md transition';
-        btnProd.className = 'px-3 py-1 text-xs font-mono font-semibold rounded text-gray-400 hover:text-white transition';
-        document.getElementById('active-graph-name').innerText = currentSession.sandbox_sha;
-        loadTopology(currentSession.sandbox_sha);
-      } else {
-        btnProd.className = 'px-3 py-1 text-xs font-mono font-semibold rounded bg-cyan-600 text-white shadow-md transition';
-        btnSandbox.className = 'px-3 py-1 text-xs font-mono font-semibold rounded text-gray-400 hover:text-white transition';
-        document.getElementById('active-graph-name').innerText = currentSession.snapshot_sha;
-        loadTopology(currentSession.snapshot_sha);
-      }
-    }
-
-    // 7. Interactive Operator Chatbot Functionality
-    function setChatQuery(queryText) {
-      const input = document.getElementById('chat-input');
-      input.value = queryText;
-      input.focus();
-    }
-
-    async function handleChatSubmit(e) {
+    // 7. Copilot Chatbot Handler
+    async function handleCopilotSubmit(e) {
       e.preventDefault();
-      const input = document.getElementById('chat-input');
-      const message = input.value.trim();
-      if (!message || !currentSession) return;
+      const input = document.getElementById('copilot-input');
+      const msg = input.value.trim();
+      if (!msg) return;
 
-      // Render user bubble
-      appendChatMessage('Operator', message);
       input.value = '';
+      appendCopilotMessage('OPERATOR', msg, 'bg-archival-stone/60 text-archival-ink');
 
-      // Render typing placeholder
-      const typingId = 'typing-' + Date.now();
-      appendTypingIndicator(typingId);
+      const apiKey = localStorage.getItem('fjord_gemini_api_key') || null;
 
       try {
         const resp = await fetch('/api/v1/chat', {
@@ -654,129 +1229,159 @@ def get_command_center_ui():
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             session_id: currentSession.session_id,
-            message: message,
-            byok_api_key: document.getElementById('byok-input').value || null
+            message: msg,
+            api_key: apiKey
           })
         });
         const data = await resp.json();
-        removeTypingIndicator(typingId);
-
-        // Render agent reply
-        appendChatMessage('Fjord Agent', data.reply);
-
-        // If candidate set updated
+        
+        let formatted = data.reply.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+        appendCopilotMessage('FJORD AGENT (Gemini 3.8 Flash)', formatted, 'bg-archival-surface arch-border text-archival-ink');
+        
         if (data.candidate_set_id) {
           currentSession.candidate_set_id = data.candidate_set_id;
           currentSession.sandbox_sha = data.sandbox_sha;
-          document.getElementById('op-cset-id').innerText = data.candidate_set_id;
-          document.getElementById('op-status').innerText = data.verification_status || 'VERIFIED_IN_MODEL';
-          document.getElementById('gate-badge').innerText = 'GATE UNLOCKED';
-          document.getElementById('gate-badge').className = 'text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800';
-          
-          const btnApprove = document.getElementById('btn-approve');
-          btnApprove.disabled = false;
-          btnApprove.className = 'flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 rounded transition cursor-pointer shadow-lg shadow-emerald-600/30';
-          
-          const btnReject = document.getElementById('btn-reject');
-          btnReject.disabled = false;
-          btnReject.className = 'px-4 bg-red-950 hover:bg-red-900 text-red-400 border border-red-800 font-bold text-xs py-2 rounded transition cursor-pointer';
-
-          if (data.yaml_diff) {
-            document.getElementById('patch-yaml').value = data.yaml_diff;
-          }
+          if (data.yaml_diff) document.getElementById('patch-yaml').value = data.yaml_diff;
+          toggleGraphView('sandbox');
         }
-
-        await refreshCypherLogs();
       } catch (err) {
-        removeTypingIndicator(typingId);
-        appendChatMessage('Fjord Agent', `**Error during reasoning:** ${err.message}`);
+        appendCopilotMessage('SYSTEM ERROR', err.message, 'bg-wiz-crimsonBg text-wiz-crimson');
       }
     }
 
-    function appendChatMessage(sender, text) {
-      const history = document.getElementById('chat-history');
-      const item = document.createElement('div');
-      
-      const isAgent = sender === 'Fjord Agent';
-      item.className = isAgent ? 'chat-bubble-agent p-3 rounded-lg text-gray-200 space-y-1.5' : 'chat-bubble-user p-2.5 rounded-lg text-white ml-8 text-right';
-      
-      const headerIcon = isAgent ? '<i class="fa-solid fa-shield-halved mr-1 text-cyan-400"></i>' : '<i class="fa-solid fa-user text-cyan-200 mr-1"></i>';
-      const headerColor = isAgent ? 'text-cyan-400' : 'text-cyan-100';
-      
-      // Basic markdown formatting
-      let formattedText = text
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/`(.*?)`/g, '<code class="bg-fjord-950 px-1 py-0.5 rounded text-cyan-300 font-mono text-[10px]">$1</code>')
-        .replace(/\n\n/g, '<br><br>')
-        .replace(/\n/g, '<br>');
+    function sendQuickPrompt(promptText) {
+      document.getElementById('copilot-input').value = promptText;
+      switchView('copilot');
+      document.getElementById('copilot-input').focus();
+    }
 
-      item.innerHTML = `
-        <div class="text-[10px] font-bold ${headerColor} flex items-center ${isAgent ? '' : 'justify-end'}">
-          ${headerIcon}<span>${sender}</span>
+    function appendCopilotMessage(sender, htmlContent, bgClass) {
+      const container = document.getElementById('copilot-chat-history');
+      const card = document.createElement('div');
+      card.className = `p-3.5 rounded arch-border ${bgClass} space-y-1.5`;
+      card.innerHTML = `
+        <div class="text-[10px] font-bold uppercase tracking-wider text-archival-muted flex items-center justify-between">
+          <span>${sender}</span>
+          <span class="text-[8px]">${new Date().toLocaleTimeString()}</span>
         </div>
-        <div class="text-[11px] leading-relaxed">${formattedText}</div>
+        <div class="text-xs leading-relaxed font-mono">${htmlContent}</div>
       `;
-      history.appendChild(item);
-      history.scrollTop = history.scrollHeight;
+      container.appendChild(card);
+      container.scrollTop = container.scrollHeight;
     }
 
-    function appendTypingIndicator(id) {
-      const history = document.getElementById('chat-history');
-      const item = document.createElement('div');
-      item.id = id;
-      item.className = 'chat-bubble-agent p-2.5 rounded-lg text-cyan-400 text-[11px] flex items-center space-x-2';
-      item.innerHTML = `
-        <i class="fa-solid fa-spinner animate-spin"></i>
-        <span class="italic font-mono">Fjord Agent is reasoning & executing FalkorDB queries...</span>
-      `;
-      history.appendChild(item);
-      history.scrollTop = history.scrollHeight;
+    // 8. Settings & API Verification
+    async function saveAndVerifyKey() {
+      const key = document.getElementById('settings-api-key').value.trim();
+      if (!key) {
+        alert('Please enter a valid Gemini API key');
+        return;
+      }
+      try {
+        const resp = await fetch('/api/v1/settings/verify-key', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({api_key: key})
+        });
+        const data = await resp.json();
+        if (data.valid) {
+          localStorage.setItem('fjord_gemini_api_key', key);
+          document.getElementById('settings-key-status').innerHTML = '<span class="text-wiz-emerald font-bold">● Key Verified & Saved to localStorage.</span>';
+          document.getElementById('status-llm-model').innerText = 'READY (gemini-3.8-flash)';
+        } else {
+          document.getElementById('settings-key-status').innerHTML = `<span class="text-wiz-crimson font-bold">● ${data.error}</span>`;
+        }
+      } catch (err) {
+        console.error('Key verify error:', err);
+      }
     }
 
-    function removeTypingIndicator(id) {
-      const el = document.getElementById(id);
-      if (el) el.remove();
+    async function clearSentinelMemory() {
+      try {
+        const resp = await fetch('/api/v1/settings/clear-vetoes', {method: 'POST'});
+        const data = await resp.json();
+        alert(data.message || 'Cleared sentinel memory vetoes');
+      } catch (err) {
+        console.error('Clear memory error:', err);
+      }
     }
 
-    // 8. In-Graph Cypher Inspector Loader
-    async function refreshCypherLogs() {
+    // 9. FastMCP Direct Tool Tester
+    async function testTool(toolName) {
+      try {
+        const args = toolName === 'discover_attack_paths' ? {max_paths: 5} : {};
+        const resp = await fetch('/api/v1/mcp/execute', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({tool_name: toolName, arguments: args})
+        });
+        const res = await resp.json();
+        alert(`FastMCP Tool '${toolName}' Result:\n` + JSON.stringify(res.result, null, 2));
+      } catch (err) {
+        alert(`Error executing ${toolName}: ${err.message}`);
+      }
+    }
+
+    // 10. Manifest Upload Handler
+    async function handleManifestUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const content = e.target.result;
+        try {
+          const resp = await fetch('/api/v1/upload', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filename: file.name, content: content})
+          });
+          const res = await resp.json();
+          currentSession = res;
+          document.getElementById('dash-active-scenario').innerText = res.filename;
+          await loadCytoscapeGraph(res.session_id, 'prod');
+          switchView('dashboard');
+        } catch (err) {
+          alert('Failed to upload manifest: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // 11. Cypher Inspector Refresher
+    async function refreshCypherInspector() {
       if (!currentSession) return;
       try {
         const resp = await fetch(`/api/v1/sessions/${currentSession.session_id}/cypher`);
         const data = await resp.json();
-        const container = document.getElementById('cypher-log-container');
-        
-        if (data.queries && data.queries.length > 0) {
-          container.innerHTML = '';
-          data.queries.forEach((q, idx) => {
-            const card = document.createElement('div');
-            card.className = 'p-2 bg-fjord-900 rounded border border-fjord-700/70 hover:border-cyan-600/50 transition';
-            card.innerHTML = `
-              <div class="flex items-center justify-between text-[10px] text-gray-400 mb-1">
-                <span class="text-cyan-400 font-bold">${q.description || `Query #${idx + 1}`}</span>
-                <span class="text-emerald-400">${q.latency_ms} ms</span>
-              </div>
-              <pre class="text-[10px] text-emerald-300 font-mono overflow-x-auto custom-scroll whitespace-pre-wrap">${q.query}</pre>
-            `;
-            container.appendChild(card);
-          });
-          container.scrollTop = container.scrollHeight;
-        }
-      } catch (e) {
-        console.error('Cypher logs load error:', e);
+        const container = document.getElementById('inspector-cypher-list');
+        container.innerHTML = '';
+        (data.queries || []).forEach(q => {
+          const box = document.createElement('div');
+          box.className = 'p-2 bg-archival-surface arch-border rounded text-[10px] space-y-1';
+          box.innerHTML = `
+            <div class="flex justify-between text-archival-muted font-bold">
+              <span class="text-wiz-emerald">${q.description}</span>
+              <span>${q.latency_ms} ms</span>
+            </div>
+            <pre class="overflow-x-auto custom-scroll text-archival-ink whitespace-pre-wrap">${q.query}</pre>
+          `;
+          container.appendChild(box);
+        });
+      } catch (err) {
+        console.error('Cypher inspector error:', err);
       }
     }
 
-    // 9. Operator Decision Gate
+    function inspectRemediationCandidate() {
+      setInspectorTab('audit');
+    }
+
     async function sendOperatorDecision(decision) {
       if (!currentSession || !currentSession.candidate_set_id) return;
       try {
         const resp = await fetch('/api/v1/operator/decision', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-UI-Token': currentSession.ui_token
-          },
+          headers: {'Content-Type': 'application/json', 'X-UI-Token': currentSession.ui_token},
           body: JSON.stringify({
             session_id: currentSession.session_id,
             candidate_set_id: currentSession.candidate_set_id,
@@ -785,16 +1390,9 @@ def get_command_center_ui():
           })
         });
         const res = await resp.json();
-        appendTraceLog(`Operator decision '${decision}' executed. Commit: ${res.commit_result ? 'SUCCESS' : 'NONE'}`, 'text-cyan-400 font-bold');
-        document.getElementById('btn-approve').disabled = true;
-        document.getElementById('btn-reject').disabled = true;
-        document.getElementById('gate-badge').innerText = decision === 'APPROVE' ? 'COMMITTED' : 'REJECTED';
-        document.getElementById('gate-badge').className = decision === 'APPROVE' ? 'text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800' : 'text-[10px] font-mono px-2 py-0.5 rounded bg-red-950 text-red-400 border border-red-800';
-        
-        appendChatMessage('Fjord Agent', `**Operator Decision Recorded:** \`${decision}\`.\nRemediation has been committed to persistent sentinel memory in FalkorDB.`);
-        await refreshCypherLogs();
-      } catch (e) {
-        console.error('Operator decision error:', e);
+        alert(`Operator Decision '${decision}' Committed Successfully!`);
+      } catch (err) {
+        alert('Operator decision failed: ' + err.message);
       }
     }
 
@@ -804,10 +1402,9 @@ def get_command_center_ui():
       alert('Kubernetes NetworkPolicy YAML copied to clipboard!');
     }
 
-    // Auto-initialize on DOM load
-    window.addEventListener('DOMContentLoaded', () => {
-      initSession();
-    });
+    function loadScenario(scen) {
+      initSession(scen);
+    }
   </script>
 </body>
 </html>

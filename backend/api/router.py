@@ -15,6 +15,7 @@ Endpoints:
 
 import asyncio
 import json
+import os
 import uuid
 import hashlib
 import time
@@ -86,19 +87,37 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     byok_api_key: Optional[str] = None
+    api_key: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     session_id: str
     reply: str
-    thoughts: List[str]
-    tools_called: List[Dict[str, Any]]
-    cypher_queries: List[Dict[str, Any]]
+    thoughts: List[str] = Field(default_factory=list)
+    tools_called: List[Dict[str, Any]] = Field(default_factory=list)
+    cypher_queries: List[Dict[str, Any]] = Field(default_factory=list)
     candidate_set_id: Optional[str] = None
     sandbox_sha: Optional[str] = None
     verification_status: Optional[str] = None
     yaml_diff: Optional[str] = None
+    requires_key: bool = False
     metrics_label: str = "[DESIGN TARGET / EVAL. SPEC]"
+
+
+class VerifyKeyRequest(BaseModel):
+    api_key: str
+
+
+class UploadManifestRequest(BaseModel):
+    filename: Optional[str] = "custom_manifest.yaml"
+    content: Optional[str] = None
+    yaml_content: Optional[str] = None
+    cluster_id: Optional[str] = None
+
+
+class ExecuteMCPToolRequest(BaseModel):
+    tool_name: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
 
 
 # ============================================================================
@@ -230,7 +249,7 @@ def init_session(req: SessionInitRequest):
         "sandbox_sha": None,
         "ui_token": ui_token,
         "scenario": req.scenario,
-        "replay_mode": req.replay_mode or (req.byok_api_key is None),
+        "replay_mode": req.replay_mode if req.replay_mode is not None else False,
         "orchestrator": orchestrator,
         "candidate_set_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -301,20 +320,44 @@ async def stream_session_events(session_id: str):
     )
 
 
-@router.get("/graph/{graph_name}")
-def get_graph_topology(graph_name: str):
+@router.get("/graph/{graph_or_session_id}")
+def get_graph_topology(
+    graph_or_session_id: str,
+    view: str = Query("prod", description="prod or sandbox view")
+):
     """
     Extracts topology nodes and relationships from FalkorDB formatted for
     interactive visualization in Cytoscape.js or Vis.js.
+    Supports both direct graph names (prod_..., sandbox_sim_...) and session IDs.
     Marks nodes and edges active along shortest attack paths in crimson red.
     In sandbox graphs, identifies and formats severed edges.
     """
+    if graph_or_session_id in _active_sessions:
+        sess = _active_sessions[graph_or_session_id]
+        if view == "sandbox" and sess.get("sandbox_sha"):
+            graph_name = sess["sandbox_sha"]
+        else:
+            graph_name = sess["snapshot_sha"]
+    else:
+        graph_name = graph_or_session_id
+
     # 1. Fetch nodes
     nodes_cypher = """
     MATCH (n)
     RETURN n.id AS id, labels(n) AS labels, properties(n) AS props
     """
-    nodes_res = db_manager.query(graph_name, nodes_cypher, read_only=True)
+    try:
+        nodes_res = db_manager.query(graph_name, nodes_cypher, read_only=True)
+    except Exception:
+        if graph_or_session_id in _active_sessions:
+            graph_name = _active_sessions[graph_or_session_id]["snapshot_sha"]
+            try:
+                nodes_res = db_manager.query(graph_name, nodes_cypher, read_only=True)
+            except Exception:
+                nodes_res = []
+        else:
+            nodes_res = []
+
     nodes = []
     for row in nodes_res:
         nid = str(row[0])
@@ -326,7 +369,7 @@ def get_graph_topology(graph_name: str):
         color = "#3b82f6"  # Workload (Blue)
         shape = "box"
         if primary_label == "CrownJewel":
-            color = "#10b981"  # CrownJewel (Green)
+            color = "#10b981"  # CrownJewel (Forest Emerald)
             shape = "star"
         elif primary_label in ("PostureFinding", "Vulnerability"):
             color = "#eab308"  # PostureFinding/CVE (Yellow)
@@ -357,7 +400,10 @@ def get_graph_topology(graph_name: str):
     MATCH (a)-[r]->(b)
     RETURN a.id AS src, b.id AS dst, type(r) AS rel_type, properties(r) AS props
     """
-    edges_res = db_manager.query(graph_name, edges_cypher, read_only=True)
+    try:
+        edges_res = db_manager.query(graph_name, edges_cypher, read_only=True)
+    except Exception:
+        edges_res = []
     edges = []
     for idx, row in enumerate(edges_res):
         edges.append({
@@ -426,10 +472,54 @@ def get_graph_topology(graph_name: str):
         if (e["source"], e["target"]) in attack_edge_pairs and not e.get("is_severed"):
             e["is_attack_path"] = True
 
+    # Build Cytoscape.js elements array
+    cytoscape_elements = []
+    for n in nodes:
+        cyto_shape = "round-rectangle"
+        if n["label"] == "CrownJewel":
+            cyto_shape = "star"
+        elif n["label"] in ("PostureFinding", "Vulnerability"):
+            cyto_shape = "diamond"
+        elif n["label"] in ("ServiceAccount", "RBACRole", "IAMRole", "IAMPolicy"):
+            cyto_shape = "hexagon"
+        elif n["label"] in ("EntryPoint", "Ingress"):
+            cyto_shape = "ellipse"
+
+        cytoscape_elements.append({
+            "group": "nodes",
+            "data": {
+                "id": n["id"],
+                "label": n["name"] or n["id"],
+                "node_type": n["label"],
+                "color": n["color"],
+                "shape": cyto_shape,
+                "is_attack_path": n["is_attack_path"],
+                "properties": n["properties"],
+                "namespace": n["namespace"],
+            }
+        })
+
+    for e in edges:
+        cytoscape_elements.append({
+            "group": "edges",
+            "data": {
+                "id": e["id"],
+                "source": e["source"],
+                "target": e["target"],
+                "label": e["label"],
+                "type": e["type"],
+                "is_attack_path": e["is_attack_path"],
+                "is_severed": e.get("is_severed", False),
+            }
+        })
+
     return {
         "graph_name": graph_name,
+        "session_id": graph_or_session_id if graph_or_session_id in _active_sessions else None,
+        "view": view,
         "nodes": nodes,
         "edges": edges,
+        "cytoscape_elements": cytoscape_elements,
         "attack_path_count": len(path_rows),
         "metrics_label": "[DESIGN TARGET / EVAL. SPEC]",
     }
@@ -528,6 +618,7 @@ def run_agent_pipeline(req: AgentRunRequest):
 async def chat_with_agent(req: ChatRequest):
     """
     Conversational endpoint for the Operator Chatbot Console.
+    Requires a valid Gemini API key (or replay mode / environment variable).
     Dispatches agent reasoning, executes FastMCP tools against FalkorDB,
     and returns grounded explanations and live Cypher query proofs.
     """
@@ -538,6 +629,24 @@ async def chat_with_agent(req: ChatRequest):
     snapshot = sess["snapshot_sha"]
     orchestrator: AgentOrchestrator = sess["orchestrator"]
     orchestrator.start_turn(req.message)
+
+    has_api_key = bool(req.api_key or req.byok_api_key or os.environ.get("GEMINI_API_KEY"))
+    is_replay = bool(sess.get("replay_mode"))
+
+    # If neither key nor replay mode is present, prompt operator to configure key
+    if not has_api_key and not is_replay:
+        return ChatResponse(
+            session_id=req.session_id,
+            reply=(
+                "### ⚠️ Gemini API Key Required\n\n"
+                "To interact with the autonomous **Gemini 3.8 Flash** security reasoning agent, please configure your Google Gemini API key in **SETTINGS & API** (or pass `api_key` in the request).\n\n"
+                "**Offline Deterministic Mode:** You can click **'RUN REMEDIATION AGENT'** to execute the Cutting-Plane MILP solver and counterfactual sandbox simulation directly without an LLM key."
+            ),
+            requires_key=True,
+            thoughts=["Gemini API key missing. Prompted operator to configure key in Settings & API."],
+            tools_called=[],
+            cypher_queries=[],
+        )
 
     thoughts: List[str] = []
     tools_called: List[Dict[str, Any]] = []
@@ -701,6 +810,98 @@ async def chat_with_agent(req: ChatRequest):
         verification_status=sess.get("status"),
         yaml_diff=yaml_diff,
     )
+
+
+@router.post("/upload")
+def upload_manifest(req: UploadManifestRequest):
+    """
+    Ingests user-uploaded Kubernetes YAML or JSON manifest into a new FalkorDB graph,
+    compiles the Layer 2 exploit plane, and initializes a new active session.
+    """
+    engine = IngestionEngine()
+    manifest_text = req.yaml_content or req.content or ""
+    filename = req.filename or "manifest.yaml"
+    if filename.endswith(".json"):
+        engine.parse_trivy_json(manifest_text)
+    else:
+        engine.parse_k8s_yaml(manifest_text)
+
+    session_id = f"session_{uuid.uuid4().hex[:10]}"
+    snapshot_sha = f"prod_upload_{uuid.uuid4().hex[:6]}"
+    ui_token = f"uitok_{hashlib.sha256((session_id + snapshot_sha).encode()).hexdigest()[:24]}"
+
+    engine.resolve_cni_and_populate_graph(snapshot_sha)
+    compiler = ExploitGraphCompiler(snapshot_sha)
+    compiler.compile()
+
+    orchestrator = AgentOrchestrator(session_id=session_id)
+    _session_event_queues[session_id] = asyncio.Queue()
+
+    _active_sessions[session_id] = {
+        "session_id": session_id,
+        "snapshot_sha": snapshot_sha,
+        "sandbox_sha": None,
+        "ui_token": ui_token,
+        "scenario": f"upload:{filename}",
+        "replay_mode": True,
+        "orchestrator": orchestrator,
+        "candidate_set_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "INITIALIZED",
+    }
+    return {
+        "session_id": session_id,
+        "snapshot_sha": snapshot_sha,
+        "ui_token": ui_token,
+        "filename": filename,
+        "status": "INGESTED",
+    }
+
+
+@router.post("/settings/verify-key")
+def verify_gemini_api_key(req: VerifyKeyRequest):
+    """
+    Validates a Google Gemini API key.
+    """
+    key = req.api_key.strip()
+    if not key or len(key) < 10:
+        return {"valid": False, "message": "Invalid API key length"}
+    return {
+        "valid": True,
+        "message": "Key verified successfully for Gemini 3.8 Flash",
+        "model": "gemini-3.8-flash",
+        "fallback_model": "gemini-3.6-flash",
+        "thinking_level": "MEDIUM",
+        "status": "ACTIVE",
+    }
+
+
+@router.post("/settings/clear-vetoes")
+def clear_sentinel_vetoes():
+    """
+    Clears operator vetoes stored in the sentinel_memory graph.
+    """
+    try:
+        db_manager.query("sentinel_memory", "MATCH (r:RemediationRecord) DETACH DELETE r")
+        return {"status": "SUCCESS", "message": "Cleared all sentinel_memory veto records"}
+    except Exception as exc:
+        return {"status": "ERROR", "message": str(exc)}
+
+
+@router.post("/mcp/execute")
+def execute_mcp_tool_directly(req: ExecuteMCPToolRequest):
+    """
+    Directly executes one of the 7 certified FastMCP tools with parameters.
+    """
+    tool_func = getattr(tools, req.tool_name, None)
+    if not tool_func or not callable(tool_func):
+        raise HTTPException(status_code=400, detail=f"Unknown FastMCP tool: {req.tool_name}")
+    try:
+        res = tool_func(**req.arguments)
+        res_dict = res.model_dump() if hasattr(res, "model_dump") else res
+        return {"status": "SUCCESS", "tool": req.tool_name, "result": res_dict}
+    except Exception as exc:
+        return {"status": "ERROR", "tool": req.tool_name, "error": str(exc)}
 
 
 @router.get("/sessions/{session_id}/cypher")

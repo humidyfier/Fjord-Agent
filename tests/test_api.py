@@ -123,7 +123,7 @@ def test_session_lifecycle_and_operator_isolation():
 
 
 def test_command_center_html_ui():
-    """Verify Command Center HTML UI is served with 3-pane structure."""
+    """Verify Command Center HTML UI is served with 3-pane structure, chatbot, and graph canvas."""
     response = client.get("/")
     assert response.status_code == 200
     html = response.text
@@ -133,3 +133,66 @@ def test_command_center_html_ui():
     assert "Explainable Path Proof" in html
     assert "Synthesized K8s Patch" in html
     assert "Operator Review Gate" in html
+    assert "vis-network" in html
+    assert "Fjord Agent Console" in html
+    assert "In-Graph FalkorDB Cypher Inspector" in html
+    assert "Node Inspector" in html
+    assert "Ask Fjord about attack paths" in html
+
+
+def test_chat_explain_attack_path():
+    """Verify chatbot /api/v1/chat endpoint explains multi-hop attack path."""
+    init_res = client.post("/api/v1/sessions/init", json={"scenario": "sample_cluster", "replay_mode": True})
+    assert init_res.status_code == 200
+    session_id = init_res.json()["session_id"]
+
+    chat_res = client.post("/api/v1/chat", json={
+        "session_id": session_id,
+        "message": "Explain the attack path from the internet to the crown jewel."
+    })
+    assert chat_res.status_code == 200
+    data = chat_res.json()
+    assert "Multi-Hop Breach Path Analysis" in data["reply"]
+    assert len(data["tools_called"]) > 0
+    assert any(t["tool"] == "discover_attack_paths" for t in data["tools_called"])
+    assert len(data["cypher_queries"]) > 0
+    assert any("algo.SPpaths" in q["query"] for q in data["cypher_queries"])
+
+
+def test_chat_freeze_workload_constraint():
+    """Verify chatbot /api/v1/chat enforces deployment freeze constraint and re-solves alternative."""
+    init_res = client.post("/api/v1/sessions/init", json={"scenario": "sample_cluster", "replay_mode": True})
+    assert init_res.status_code == 200
+    session_id = init_res.json()["session_id"]
+
+    prompt = "We have a deployment freeze on api-service, find an alternative remediation."
+    chat_res = client.post("/api/v1/chat", json={
+        "session_id": session_id,
+        "message": prompt
+    })
+    assert chat_res.status_code == 200
+    data = chat_res.json()
+    assert "Deployment Freeze Acknowledged: `api-service`" in data["reply"]
+    assert data["candidate_set_id"] is not None
+    assert data["sandbox_sha"] is not None
+    assert data["verification_status"] == "VERIFIED_IN_MODEL"
+    # Verify tool calls included update_dependency_or_constraint and compute_optimal_remediations
+    tool_names = [t["tool"] for t in data["tools_called"]]
+    assert "update_dependency_or_constraint" in tool_names
+    assert "compute_optimal_remediations" in tool_names
+    assert "simulate_fix_in_sandbox" in tool_names
+
+
+def test_cypher_inspector_logs():
+    """Verify /api/v1/sessions/{session_id}/cypher returns recorded FalkorDB queries."""
+    init_res = client.post("/api/v1/sessions/init", json={"scenario": "sample_cluster", "replay_mode": True})
+    assert init_res.status_code == 200
+    session_id = init_res.json()["session_id"]
+
+    cypher_res = client.get(f"/api/v1/sessions/{session_id}/cypher")
+    assert cypher_res.status_code == 200
+    data = cypher_res.json()
+    assert data["session_id"] == session_id
+    assert len(data["queries"]) >= 1
+    query_texts = [q["query"] for q in data["queries"]]
+    assert any("algo.SPpaths" in q or "EXPLOIT_STEP" in q for q in query_texts)

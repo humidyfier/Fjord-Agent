@@ -1,7 +1,7 @@
 # Project Fjord: Empirical Benchmark & Evaluation Report
-**Generated:** 2026-10-17 07:00:14 UTC  
+**Generated:** 2026-10-17 09:29:43 UTC  
 **Target Environment:** Windows 11 Native, FalkorDB (Docker), Python 3.11 (`.venv`), Kind Cluster with Calico CNI  
-**Total Benchmark Runtime:** 2.45 seconds  
+**Total Benchmark Runtime:** 3.29 seconds  
 **Specification Tag:** `[DESIGN TARGET / EVAL. SPEC / VERIFIED ON LIVE ENGINE]`
 
 ---
@@ -11,10 +11,10 @@ Evaluates compilation latency, edge-set recall, and path elimination against an 
 
 | Metric | Measured Value | Specification Target | Status |
 | :--- | :--- | :--- | :--- |
-| **Exploit Compilation Latency** | `53.8 ms` | `< 100.0 ms` | **PASS** |
-| **FalkorDB `algo.SPpaths` Traversal Latency** | `8.12 ms` | `< 20.0 ms` | **PASS** |
-| **Pure MILP Solver CPU Latency (`milp`)** | `37.19 ms` | `< 100.0 ms` | **PASS** |
-| **End-to-End Multi-Iteration Cutting-Plane & Sandbox Loop** | `271.09 ms` | `< 500.0 ms` | **PASS** |
+| **Exploit Compilation Latency** | `57.63 ms` | `< 100.0 ms` | **PASS** |
+| **FalkorDB `algo.SPpaths` Traversal Latency** | `12.49 ms` | `< 20.0 ms` | **PASS** |
+| **Pure MILP Solver CPU Latency (`milp`)** | `30.2 ms` | `< 100.0 ms` | **PASS** |
+| **End-to-End Multi-Iteration Cutting-Plane & Sandbox Loop** | `382.67 ms` | `< 500.0 ms` | **PASS** |
 | **Synthesized Layer 2 Exploit Edges** | `14` | `> 0` | **PASS** |
 | **NetworkX Independent Simple Paths (<=8 hops)** | `2` | Ground Truth | **IDENTIFIED** |
 | **NetworkX Oracle Surviving Simple Paths** | `0` | `0` | **PASS** |

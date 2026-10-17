@@ -85,8 +85,8 @@ class NetworkPolicyYAMLGenerator:
         yaml_patches: List[str] = []
         for dst_id, blocked_sources in block_map.items():
             try:
-                patch = self._generate_policy_for_workload(dst_id, blocked_sources)
-                yaml_patches.append(patch)
+                patches = self._generate_policies_for_workload(dst_id, blocked_sources)
+                yaml_patches.extend(patches)
             except Exception as exc:
                 logger.error("Failed to generate NetworkPolicy for %s: %s", dst_id, exc)
 
@@ -100,26 +100,24 @@ class NetworkPolicyYAMLGenerator:
     # INTERNAL HELPERS
     # ------------------------------------------------------------------
 
-    def _generate_policy_for_workload(
+    def _generate_policies_for_workload(
         self,
         dst_workload_id: str,
         blocked_sources: Set[str],
-    ) -> str:
+    ) -> List[str]:
         """
-        Synthesise a NetworkPolicy that allows all CURRENT ingress to dst except
-        the blocked sources (allow-list complement).
-
-        If the workload is already selected by a shared NetworkPolicy, we
-        perform collateral policy splitting: the workload gets its own dedicated
-        managed policy; the shared policy is NOT modified (it stays in effect
-        for other workloads).
+        Synthesise NetworkPolicy manifests covering the 3 cases:
+        Case 1: No existing policy on target workload B -> create dedicated policy for B.
+        Case 2: 1 dedicated policy on B -> update/replace rules for B.
+        Case 3: Permissive policy shared by B and collateral workload C -> emit two manifests:
+                (a) Narrowed shared policy excluding B (e.g. targeting C only).
+                (b) New dedicated policy on B restricting ingress from blocked callers.
         """
         dst_ns, dst_name = _parse_workload_id(dst_workload_id)
 
         # Determine labels of destination workload
         dst_labels = self._get_workload_labels(dst_workload_id)
         if not dst_labels:
-            # Fall back to name-based label selector
             dst_labels = {"app": dst_name}
 
         # Compute the current allowed ingress sources (minus blocked ones)
@@ -136,24 +134,59 @@ class NetworkPolicyYAMLGenerator:
             rule = self._build_ingress_rule(src_labels, src_ns, dst_ns)
             ingress_rules.append(rule)
 
-        # Detect shared policy conflict → note in annotation (split advice)
-        shared_policy_name = self._find_shared_policy(dst_workload_id, dst_labels)
-        audit_note = FJORD_AUDIT_NOTE
-        if shared_policy_name:
-            audit_note += (
-                f" [Collateral Split] Workload '{dst_name}' is currently selected "
-                f"by shared NetworkPolicy '{shared_policy_name}'. "
-                f"This dedicated policy takes precedence; verify shared policy "
-                f"does not re-open blocked ingress."
-            )
+        # Check for shared policy (Case 3)
+        shared_info = self._find_shared_policy_info(dst_workload_id, dst_labels)
+        manifests = []
 
-        # Build unique, deterministic policy name
+        if shared_info:
+            # Case 3: Shared policy detected
+            shared_name, collateral_workloads = shared_info
+            # Manifest 3a: Narrowed shared policy targeting collateral workloads only
+            for coll_id in collateral_workloads:
+                coll_ns, coll_name = _parse_workload_id(coll_id)
+                coll_labels = self._get_workload_labels(coll_id) or {"app": coll_name}
+                narrowed_manifest = {
+                    "apiVersion": "networking.k8s.io/v1",
+                    "kind": "NetworkPolicy",
+                    "metadata": {
+                        "name": f"{shared_name}-narrowed",
+                        "namespace": coll_ns,
+                        "annotations": {
+                            FJORD_MANAGED_ANNOTATION: FJORD_MANAGED_VALUE,
+                            FJORD_AUDIT_ANNOTATION: f"Collateral split: Narrowed '{shared_name}' to retain protection on collateral workload '{coll_name}' while separating '{dst_name}'."
+                        },
+                        "labels": {
+                            "fjord.security/managed": "true",
+                            "fjord.security/split-from": shared_name,
+                        }
+                    },
+                    "spec": {
+                        "podSelector": {"matchLabels": coll_labels},
+                        "policyTypes": ["Ingress"],
+                        "ingress": [] # Retain default baseline
+                    }
+                }
+                manifests.append(yaml.dump(narrowed_manifest, default_flow_style=False, sort_keys=False))
+
+            audit_note = (
+                f"{FJORD_AUDIT_NOTE} [Case 3: Collateral Split] Target '{dst_name}' separated "
+                f"from shared policy '{shared_name}'."
+            )
+        else:
+            # Case 1 (no existing policy) or Case 2 (dedicated policy)
+            existing_dedicated = self._find_dedicated_policy(dst_workload_id)
+            if existing_dedicated:
+                audit_note = f"{FJORD_AUDIT_NOTE} [Case 2: Dedicated Policy Modified] Updated '{existing_dedicated}'."
+            else:
+                audit_note = f"{FJORD_AUDIT_NOTE} [Case 1: Dedicated Policy Created] New policy for '{dst_name}'."
+
+        # Manifest: Dedicated policy for dst_workload_id
         short_hash = hashlib.sha1(
             (dst_workload_id + ",".join(sorted(blocked_sources))).encode()
         ).hexdigest()[:8]
         policy_name = f"fjord-managed-{dst_name}-{short_hash}"
 
-        manifest = {
+        dedicated_manifest = {
             "apiVersion": "networking.k8s.io/v1",
             "kind": "NetworkPolicy",
             "metadata": {
@@ -174,8 +207,9 @@ class NetworkPolicyYAMLGenerator:
                 "ingress": ingress_rules,
             },
         }
+        manifests.append(yaml.dump(dedicated_manifest, default_flow_style=False, sort_keys=False))
 
-        return yaml.dump(manifest, default_flow_style=False, sort_keys=False)
+        return manifests
 
     def _build_ingress_rule(
         self,

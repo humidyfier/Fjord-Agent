@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: fjord-falkordb
+    ports:
+      # Bound strictly to 127.0.0.1 (localhost) for security isolation
+      - "127.0.0.1:6380:6379"
+    restart: unless-stopped
+    volumes:
+      - falkordb_data:/data
+
+volumes:
+  falkordb_data:

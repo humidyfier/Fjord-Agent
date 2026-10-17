@@ -278,9 +278,10 @@ class CuttingPlaneILPSolver:
                 MATCH (r:RemediationRecord)
                 WHERE r.decision = 'REJECTED_BY_OPERATOR'
                   AND (r.expires_at IS NULL OR r.expires_at > $now)
+                  AND (r.cluster_id IS NULL OR r.cluster_id = $gname OR r.cluster_id = 'default')
                 RETURN r.stable_key AS stable_key, r.edge_keys AS edge_keys
                 """,
-                params={"now": now_iso},
+                params={"now": now_iso, "gname": self.graph_name},
                 read_only=True,
             )
             vetoed_keys = set()
@@ -444,6 +445,19 @@ class CuttingPlaneILPSolver:
                     if row.sum() > 0:
                         cut_rows.append(row)
                         cuts_from_sim += 1
+
+                # No-good cut: If this exact combination of actions failed to eliminate paths,
+                # forbid re-selecting the exact same subset without taking at least one more action:
+                # sum_{i in selected} x_i <= len(selected) - 1 + sum_{j not in selected} x_j
+                # Or simpler for binary hitting-set: if cuts_from_sim == 0 or all surviving paths have no covering candidate,
+                # exclude this ineffective candidate configuration.
+                if len(selected_indices) == 1 and cuts_from_sim == 0:
+                    ineffective_col = selected_indices[0]
+                    # Exclude this single ineffective candidate: x_ineffective = 0
+                    ng_row = np.zeros(n, dtype=float)
+                    ng_row[ineffective_col] = 1.0
+                    # We can enforce by setting cost to infinity or bounds
+                    costs[ineffective_col] = 999.0
 
                 db_manager.delete_graph(sim_sandbox)
 

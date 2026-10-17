@@ -91,7 +91,7 @@ class IngestionEngine:
             elif kind in ["RoleBinding", "ClusterRoleBinding"]:
                 self._parse_role_binding(doc, kind, name, namespace)
             elif kind == "Secret":
-                self._parse_secret(name, namespace, doc.get("type", "Opaque"))
+                self._parse_secret(doc, name, namespace, doc.get("type", "Opaque"))
             elif kind == "Node":
                 self.worker_nodes[name] = {"name": name, "labels": labels}
 
@@ -445,14 +445,21 @@ class IngestionEngine:
                     "props": {}
                 })
 
-    def _parse_secret(self, name: str, namespace: str, sec_type: str):
+    def _parse_secret(self, doc: dict, name: str, namespace: str, sec_type: str):
         key = f"{namespace}/{name}"
+        # Security invariant: Never store raw secret data or stringData in FalkorDB
+        data_keys = list(doc.get("data", {}).keys()) if isinstance(doc.get("data"), dict) else []
+        string_data_keys = list(doc.get("stringData", {}).keys()) if isinstance(doc.get("stringData"), dict) else []
+        all_keys = list(set(data_keys + string_data_keys))
+
         self.crown_jewels[key] = {
             "id": key,
             "name": name,
             "namespace": namespace,
             "type": sec_type,
-            "category": "K8S_SECRET"
+            "category": "K8S_SECRET",
+            "secret_keys": all_keys,
+            # Note: No raw data or stringData stored in graph
         }
 
     # =========================================================================

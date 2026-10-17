@@ -120,25 +120,27 @@ def test_sentinel_memory_survives_reingest_and_vetoes_solver():
     compiler = ExploitGraphCompiler(new_snapshot)
     compiler.compile()
 
-    # 3. Solve on fresh snapshot
-    solver = CuttingPlaneILPSolver(new_snapshot)
-    candidates = solver.enumerate_candidates()
+    try:
+        # 3. Solve on fresh snapshot
+        solver = CuttingPlaneILPSolver(new_snapshot)
+        candidates = solver.enumerate_candidates()
 
-    # Assert that candidate containing vetoed_edge is marked forbidden
-    vetoed_candidates = [c for c in candidates if vetoed_edge in c.severs_edge_keys]
-    assert len(vetoed_candidates) >= 1
-    for vc in vetoed_candidates:
-        assert vc.forbidden is True
-        assert vc.disruption_cost == 999.0
+        # Assert that candidate containing vetoed_edge is marked forbidden
+        vetoed_candidates = [c for c in candidates if vetoed_edge in c.severs_edge_keys]
+        assert len(vetoed_candidates) >= 1
+        for vc in vetoed_candidates:
+            assert vc.forbidden is True
+            assert vc.disruption_cost == 999.0
 
-    # 4. Solve and ensure selected actions do NOT include the vetoed candidate
-    result = solver.solve(candidates)
-    assert result.solver_status == "optimal"
-    for sel in result.selected_actions:
-        assert vetoed_edge not in sel.severs_edge_keys
-
-    # Clean up
-    db_manager.delete_graph(new_snapshot)
+        # 4. Solve and ensure selected actions do NOT include the vetoed candidate
+        result = solver.solve(candidates)
+        assert result.solver_status == "optimal"
+        for sel in result.selected_actions:
+            assert vetoed_edge not in sel.severs_edge_keys
+    finally:
+        # Clean up snapshot and test record from sentinel_memory
+        db_manager.delete_graph(new_snapshot)
+        db_manager.query("sentinel_memory", "MATCH (r:RemediationRecord {candidate_set_id: 'cset_operator_veto_test'}) DELETE r")
 
 
 def test_startup_self_check():

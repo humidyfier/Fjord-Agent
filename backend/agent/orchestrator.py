@@ -84,11 +84,12 @@ class AgentOrchestrator:
         stable_key: Optional[str] = None,
         edge_keys: Optional[List[str]] = None,
         expires_at: Optional[str] = None,
+        cluster_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         UI-only method to record operator approval or rejection.
         Never exposed in model MCP tool declarations.
-        Persists decision to sentinel_memory graph in FalkorDB.
+        Persists decision to sentinel_memory graph in FalkorDB scoped by cluster_id.
         """
         self.logger.log_operator_action(
             candidate_set_id=candidate_set_id,
@@ -111,6 +112,7 @@ class AgentOrchestrator:
                     r.stable_key = $stable_key,
                     r.edge_keys = $edge_keys,
                     r.expires_at = $expires_at,
+                    r.cluster_id = $cluster_id,
                     r.recorded_at = $recorded_at
                 """,
                 params={
@@ -121,6 +123,7 @@ class AgentOrchestrator:
                     "stable_key": stable_key or candidate_set_id,
                     "edge_keys": edge_keys or [],
                     "expires_at": expires_at,
+                    "cluster_id": cluster_id,
                     "recorded_at": now_iso,
                 }
             )

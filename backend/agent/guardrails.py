@@ -22,22 +22,46 @@ from typing import Dict, Set, Optional, Tuple
 from backend.schema import VerificationStatus
 
 
+import re
+
 MAX_UNTRUSTED_DATA_LEN = 2048
 MAX_TOOL_CALLS_PER_TURN = 5
+
+# Sensitive credential redaction patterns
+REDACTION_PATTERNS = [
+    (re.compile(r"AKIA[0-9A-Z]{16}"), "[REDACTED_AWS_ACCESS_KEY]"),
+    (re.compile(r"(?i)bearer\s+[a-zA-Z0-9_\-\.]{20,}"), "[REDACTED_BEARER_TOKEN]"),
+    (re.compile(r"-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA )?PRIVATE KEY-----"), "[REDACTED_PRIVATE_KEY]"),
+    (re.compile(r"(?i)(?:password|secret|token)\s*[:=]\s*['\"]?([^\s'\"]{6,})['\"]?"), "[REDACTED_CREDENTIAL]"),
+]
+
+
+def redact_sensitive_credentials(text: str) -> str:
+    """Regex-redacts bearer tokens, passwords, private keys, and AWS access keys."""
+    redacted = text
+    for pattern, replacement in REDACTION_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    return redacted
 
 
 def sanitize_untrusted_data(text: Optional[str], max_len: int = MAX_UNTRUSTED_DATA_LEN) -> str:
     """
     Wraps untrusted strings in <untrusted_data> tags and truncates to max_len.
-    Escapes nested closing tags to prevent escape attacks.
+    Redacts sensitive credentials and escapes nested closing tags to prevent escape attacks.
     """
     if text is None:
         return "<untrusted_data></untrusted_data>"
-    
-    clean_text = str(text).replace("</untrusted_data>", "[escaped_tag]")
+
+    # 1. Redact credentials
+    clean_text = redact_sensitive_credentials(str(text))
+
+    # 2. Neutralize escape tags
+    clean_text = clean_text.replace("</untrusted_data>", "[escaped_tag]")
+
+    # 3. Truncate
     if len(clean_text) > max_len:
         clean_text = clean_text[:max_len] + "... [TRUNCATED]"
-        
+
     return f"<untrusted_data>{clean_text}</untrusted_data>"
 
 

@@ -368,8 +368,62 @@ class CuttingPlaneILPSolver:
                 "Iteration %d: selected %d actions, cost=%.2f",
                 iteration, len(selected_actions), total_cost,
             )
-            solver_status = "optimal"
-            break  # One solve round is enough; sandbox verification is done separately
+
+            # 4. Counterfactual validation: simulate selected candidates in an ephemeral sandbox
+            # to check if any alternative attack paths survive
+            sim_sandbox = f"sandbox_ilp_{uuid.uuid4().hex[:10]}"
+            try:
+                ok = db_manager.copy_graph(self.graph_name, sim_sandbox)
+                if not ok:
+                    # If copy fails, fallback to breaking and trusting LP relaxation
+                    solver_status = "optimal"
+                    break
+
+                for act in selected_actions:
+                    try:
+                        db_manager.query(sim_sandbox, act.mutation_cypher, params=act.mutation_params)
+                    except Exception as act_exc:
+                        logger.warning("Error applying action in ILP sandbox: %s", act_exc)
+
+                comp = ExploitGraphCompiler(sim_sandbox)
+                comp.compile()
+
+                surviving_in_sim = self._get_active_paths(sim_sandbox)
+                if not surviving_in_sim:
+                    # All paths successfully eliminated!
+                    solver_status = "optimal"
+                    db_manager.delete_graph(sim_sandbox)
+                    break
+
+                # Alternative paths survived: add hitting cuts for surviving paths in next round
+                logger.info(
+                    "Iteration %d: %d surviving paths found in sandbox. Adding cuts for next iteration.",
+                    iteration, len(surviving_in_sim),
+                )
+                cuts_from_sim = 0
+                for path_edge_keys in surviving_in_sim:
+                    row = np.zeros(n, dtype=float)
+                    for ek in path_edge_keys:
+                        for col in edge_to_col.get(ek, []):
+                            row[col] = 1.0
+                    if row.sum() > 0:
+                        cut_rows.append(row)
+                        cuts_from_sim += 1
+
+                db_manager.delete_graph(sim_sandbox)
+
+                if cuts_from_sim == 0:
+                    # Cannot eliminate remaining paths with available candidates
+                    solver_status = "infeasible"
+                    break
+            except Exception as sim_exc:
+                logger.warning("Sandbox check in cutting-plane loop encountered error: %s", sim_exc)
+                solver_status = "optimal"
+                try:
+                    db_manager.delete_graph(sim_sandbox)
+                except Exception:
+                    pass
+                break
 
         surviving = self._count_active_paths(self.graph_name)
 

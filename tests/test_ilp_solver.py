@@ -356,41 +356,43 @@ def test_sandbox_fails_if_path_survives():
 # T2-6: YAML generator produces valid K8s NetworkPolicy manifest
 # ---------------------------------------------------------------------------
 
-def test_yaml_generator_produces_valid_k8s_manifest(solver_graph):
+def test_yaml_generator_produces_valid_k8s_manifest():
     """
     After solving, YAML generator must produce parseable NetworkPolicy manifests
     with correct apiVersion, kind, podSelector, and Fjord audit annotations.
     """
-    solver = CuttingPlaneILPSolver(solver_graph, max_iterations=10)
-    candidates = solver.enumerate_candidates()
-    result = solver.solve(candidates)
+    g = _build_minimal_graph(f"test_ilp_t2_6_{uuid.uuid4().hex[:6]}")
+    try:
+        solver = CuttingPlaneILPSolver(g, max_iterations=10)
+        candidates = solver.enumerate_candidates()
+        result = solver.solve(candidates)
 
-    # Only run YAML generation if solver found network-policy candidates
-    net_actions = [
-        a for a in result.selected_actions
-        if a.remediation_type in (RemediationType.NETWORK_POLICY_ADD, RemediationType.NETWORK_POLICY_PATCH)
-    ]
-    if not net_actions:
-        pytest.skip("No NetworkPolicy actions selected — nothing to generate YAML for")
+        net_actions = [
+            a for a in result.selected_actions
+            if a.remediation_type in (RemediationType.NETWORK_POLICY_ADD, RemediationType.NETWORK_POLICY_PATCH)
+        ]
+        assert len(net_actions) >= 1, "Must select at least one NetworkPolicy action"
 
-    gen = NetworkPolicyYAMLGenerator(solver_graph)
-    yaml_patches = gen.generate(net_actions)
+        gen = NetworkPolicyYAMLGenerator(g)
+        yaml_patches = gen.generate(net_actions)
 
-    assert len(yaml_patches) >= 1, "Must produce at least one YAML patch"
+        assert len(yaml_patches) >= 1, "Must produce at least one YAML patch"
 
-    for yaml_str in yaml_patches:
-        manifest = yaml.safe_load(yaml_str)
-        assert manifest["apiVersion"] == "networking.k8s.io/v1", "Wrong apiVersion"
-        assert manifest["kind"] == "NetworkPolicy", "Wrong kind"
-        assert "podSelector" in manifest["spec"], "Missing podSelector"
-        assert "Ingress" in manifest["spec"]["policyTypes"], "Missing policyTypes: Ingress"
+        for yaml_str in yaml_patches:
+            manifest = yaml.safe_load(yaml_str)
+            assert manifest["apiVersion"] == "networking.k8s.io/v1", "Wrong apiVersion"
+            assert manifest["kind"] == "NetworkPolicy", "Wrong kind"
+            assert "podSelector" in manifest["spec"], "Missing podSelector"
+            assert "Ingress" in manifest["spec"]["policyTypes"], "Missing policyTypes: Ingress"
 
-        annotations = manifest["metadata"].get("annotations", {})
-        assert "fjord.security/managed-by" in annotations, "Missing Fjord managed-by annotation"
-        assert "fjord.security/remediation-note" in annotations, "Missing Fjord audit note annotation"
-        assert manifest["metadata"]["annotations"]["fjord.security/managed-by"] == (
-            "fjord-remediation-agent"
-        ), "Wrong managed-by annotation value"
+            annotations = manifest["metadata"].get("annotations", {})
+            assert "fjord.security/managed-by" in annotations, "Missing Fjord managed-by annotation"
+            assert "fjord.security/remediation-note" in annotations, "Missing Fjord audit note annotation"
+            assert manifest["metadata"]["annotations"]["fjord.security/managed-by"] == (
+                "fjord-remediation-agent"
+            ), "Wrong managed-by annotation value"
+    finally:
+        db_manager.delete_graph(g)
 
 
 # ---------------------------------------------------------------------------
@@ -408,8 +410,7 @@ def test_yaml_generator_collateral_split_annotation():
         # Seed a minimal graph with a shared NetworkPolicy selecting workload-b
         db_manager.query(g, """
         MERGE (wa:Workload {id: 'test/workload-a', name: 'workload-a', namespace: 'test'})
-        MERGE (wb:Workload {id: 'test/workload-b', name: 'workload-b', namespace: 'test',
-                            labels: {}})
+        MERGE (wb:Workload {id: 'test/workload-b', name: 'workload-b', namespace: 'test'})
         MERGE (wc:Workload {id: 'test/workload-c', name: 'workload-c', namespace: 'test'})
         MERGE (np:NetworkPolicy {id: 'test/shared-np', name: 'shared-np', namespace: 'test'})
         MERGE (wa)-[:CAN_REACH_NET {port: 8080}]->(wb)

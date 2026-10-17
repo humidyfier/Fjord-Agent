@@ -260,23 +260,6 @@ class IngestionEngine:
             "props": {"public": True}
         })
 
-    def add_assume_breach_workload(self, workload_id: str):
-        """Creates an assume-breach entry point node targeting a specific workload."""
-        ep_key = f"entry:breach:{workload_id}"
-        self.entry_points[ep_key] = {
-            "id": ep_key,
-            "name": f"Assumed Breach: {workload_id}",
-            "entry_type": "ASSUME_BREACH"
-        }
-        self.edges.append({
-            "type": "EXPOSES",
-            "from_label": NODE_LABELS["ENTRY_POINT"],
-            "from_id": ep_key,
-            "to_label": NODE_LABELS["WORKLOAD"],
-            "to_id": workload_id,
-            "props": {"assume_breach": True}
-        })
-
         # Routes to backend services
         rules = doc.get("spec", {}).get("rules", [])
         for r in rules:
@@ -294,6 +277,23 @@ class IngestionEngine:
                         "to_id": svc_key,
                         "props": {"path": p.get("path", "/")}
                     })
+
+    def add_assume_breach_workload(self, workload_id: str):
+        """Creates an assume-breach entry point node targeting a specific workload."""
+        ep_key = f"entry:breach:{workload_id}"
+        self.entry_points[ep_key] = {
+            "id": ep_key,
+            "name": f"Assumed Breach: {workload_id}",
+            "entry_type": "ASSUME_BREACH"
+        }
+        self.edges.append({
+            "type": "EXPOSES",
+            "from_label": NODE_LABELS["ENTRY_POINT"],
+            "from_id": ep_key,
+            "to_label": NODE_LABELS["WORKLOAD"],
+            "to_id": workload_id,
+            "props": {"assume_breach": True}
+        })
 
     def _parse_network_policy(self, doc: dict, name: str, namespace: str):
         spec = doc.get("spec", {})

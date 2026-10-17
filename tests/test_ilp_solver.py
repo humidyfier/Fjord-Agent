@@ -86,9 +86,8 @@ def solver_graph():
 
 def _build_minimal_graph(graph_name: str, with_required_dep: bool = False):
     """
-    Seed a minimal graph:
-      VirtualSource → Workload A → Workload B (CrownJewel) → VirtualSink
-    via EXPLOIT_STEP and CAN_REACH_NET edges.
+    Seed a minimal graph with Layer 1 topology and compile Layer 2 Exploit Plane:
+      VirtualSource → EntryPoint → Workload A → Workload B → CrownJewel → VirtualSink
     Optionally adds a REQUIRED_DEPENDENCY from A to B.
     """
     db_manager.delete_graph(graph_name)
@@ -96,42 +95,26 @@ def _build_minimal_graph(graph_name: str, with_required_dep: bool = False):
     cypher_nodes = """
     MERGE (vs:VirtualSource {id: 'virtual-super-source', name: 'VirtualSource'})
     MERGE (vk:VirtualSink   {id: 'virtual-super-sink',  name: 'VirtualSink'})
+    MERGE (ep:EntryPoint  {id: 'test/entry-point', name: 'entry-point'})
     MERGE (wa:Workload  {id: 'test/workload-a', name: 'workload-a', namespace: 'test'})
     MERGE (wb:Workload  {id: 'test/workload-b', name: 'workload-b', namespace: 'test'})
     MERGE (cj:CrownJewel {id: 'test/crown-db',  name: 'crown-db',  namespace: 'test',
                            category: 'K8S_SECRET'})
+    MERGE (ep)-[:ROUTES_TO]->(wa)
+    MERGE (wa)-[:CAN_REACH_NET {port: 8080}]->(wb)
+    MERGE (wb)-[:MOUNTS_SECRET]->(cj)
     """
     db_manager.query(graph_name, cypher_nodes)
-
-    # Exploit edges: VS → A → B → CrownJewel → VK
-    db_manager.query(graph_name, """
-    MATCH (vs:VirtualSource {id: 'virtual-super-source'}), (wa:Workload {id: 'test/workload-a'})
-    MERGE (vs)-[:EXPLOIT_STEP {step_type:'INITIAL_ACCESS', technique:'TEST', mechanism:'TEST',
-                                cost:0.1, description:'test'}]->(wa)
-    """)
-    db_manager.query(graph_name, """
-    MATCH (wa:Workload {id: 'test/workload-a'}), (wb:Workload {id: 'test/workload-b'})
-    MERGE (wa)-[:CAN_REACH_NET {port: 8080}]->(wb)
-    MERGE (wa)-[:EXPLOIT_STEP {step_type:'NETWORK_REACH', technique:'LATERAL_PIVOT',
-                                mechanism:'LATERAL_TCP_TRAFFIC', cost:1.5, port:8080,
-                                description:'lateral'}]->(wb)
-    """)
-    db_manager.query(graph_name, """
-    MATCH (wb:Workload {id: 'test/workload-b'}), (cj:CrownJewel {id: 'test/crown-db'})
-    MERGE (wb)-[:EXPLOIT_STEP {step_type:'SECRET_ACCESS', technique:'DIRECT_ASSET_ACCESS',
-                                mechanism:'HOSTED_CROWN_JEWEL', cost:0.1, description:'access'}]->(cj)
-    """)
-    db_manager.query(graph_name, """
-    MATCH (cj:CrownJewel {id: 'test/crown-db'}), (vk:VirtualSink {id: 'virtual-super-sink'})
-    MERGE (cj)-[:EXPLOIT_STEP {step_type:'CROWN_JEWEL_COMPROMISE', technique:'DATA_EXFIL',
-                                mechanism:'OBJECTIVE_COMPLETED', cost:0.0, description:'exfil'}]->(vk)
-    """)
 
     if with_required_dep:
         db_manager.query(graph_name, """
         MATCH (wa:Workload {id: 'test/workload-a'}), (wb:Workload {id: 'test/workload-b'})
         MERGE (wa)-[:REQUIRED_DEPENDENCY {description:'required business flow'}]->(wb)
         """)
+
+    # Compile exploit plane
+    compiler = ExploitGraphCompiler(graph_name)
+    compiler.compile()
 
     return graph_name
 

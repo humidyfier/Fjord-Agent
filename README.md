@@ -256,6 +256,7 @@ python tests/task0_vertical_slice.py
 Fjord/
 ├── agents.md                     # Agentic development rules and invariants
 ├── architecture.md               # System design, data flow, and architectural principles
+├── LICENSE                       # MIT License
 ├── prd.md                        # Product requirements document and design targets
 ├── pytest.ini                    # Pytest configuration
 ├── requirements.txt              # Core project dependencies
@@ -323,5 +324,5 @@ For AI coding agents and contributors implementing tools or graph modifications,
 ## Contributing & License
 
 - **Project Status**: Developed for Track 1 of the WeMakeDevs FalkorDB Hackathon ("Agents That Act on Connected Data").
-- **License**: Pending repository license specification.
+- **License**: Released under the [MIT License](LICENSE).
 - **Contributing**: Refer to [`agents.md`](agents.md) for coding conventions, schema constraints, and safety invariants.

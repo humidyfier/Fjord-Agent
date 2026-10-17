@@ -1,0 +1,136 @@
+/*
+  frontend/styles.css
+  Theme: Neo-Brutalist Archival Security Workspace
+  Palette: Warm Cream (#F3EFE6), Card Surface (#FAF8F3), Gridlines (#D4CFC4), Obsidian Charcoal (#141517)
+*/
+
+:root {
+  --bg-archival: #F3EFE6;
+  --bg-surface: #FAF8F3;
+  --bg-stone: #ECE7DC;
+  --border-arch: #D4CFC4;
+  --text-ink: #181818;
+  --text-muted: #68645C;
+  --text-faint: #8E8A80;
+  
+  --bg-obsidian-950: #0C0D0E;
+  --bg-obsidian-900: #141517;
+  --bg-obsidian-850: #1C1D21;
+  --bg-obsidian-800: #24262B;
+  --border-obsidian: #2A2C30;
+  --text-cream: #EAE6DF;
+
+  --wiz-crimson: #C93B2B;
+  --wiz-crimson-bg: #FBEAE8;
+  --wiz-emerald: #236B48;
+  --wiz-emerald-bg: #E6F4ED;
+  --wiz-ochre: #D97724;
+  --wiz-ochre-bg: #FDF3E7;
+  --wiz-blue: #2563EB;
+  --wiz-blue-bg: #EFF6FF;
+  --wiz-purple: #7C3AED;
+  --wiz-purple-bg: #F5F3FF;
+}
+
+body {
+  background-color: var(--bg-archival);
+  color: var(--text-ink);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+.font-display { font-family: 'Space Grotesk', sans-serif; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Architectural Grid Borders */
+.arch-border { border: 1px solid var(--border-arch); }
+.arch-border-r { border-right: 1px solid var(--border-arch); }
+.arch-border-b { border-bottom: 1px solid var(--border-arch); }
+.arch-border-l { border-left: 1px solid var(--border-arch); }
+.arch-border-t { border-top: 1px solid var(--border-arch); }
+
+/* Custom Scrollbars */
+.custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+.custom-scroll::-webkit-scrollbar-thumb { background: var(--border-arch); border-radius: 2px; }
+.custom-scroll::-webkit-scrollbar-track { background: transparent; }
+
+.dark-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+.dark-scroll::-webkit-scrollbar-thumb { background: var(--border-obsidian); border-radius: 2px; }
+.dark-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Nav Item States */
+.nav-item-active {
+  background-color: var(--bg-obsidian-800);
+  color: var(--text-cream);
+  border-left: 3px solid var(--wiz-emerald);
+}
+
+/* Retractable Drawer Transitions */
+#right-inspector-drawer {
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width, transform;
+}
+#right-inspector-drawer.collapsed {
+  width: 0px !important;
+  min-width: 0px !important;
+  transform: translateX(100%);
+  border-left-width: 0px !important;
+  overflow: hidden;
+}
+
+/* Canvas Viewports */
+#canvas-viewport-2d, #canvas-viewport-3d {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+}
+
+#topology-canvas {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-surface);
+}
+
+#canvas-viewport-3d {
+  background: #0C0D0E;
+}
+
+/* KPI Card Clickable Hover */
+.kpi-card {
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+}
+.kpi-card:hover {
+  background-color: #F5F0E6;
+  border-bottom-color: var(--wiz-blue);
+}
+.kpi-card.active-kpi {
+  background-color: #EFE9DC;
+  border-bottom: 3px solid var(--wiz-crimson);
+}
+
+/* Tab Active Styles */
+.inspector-tab-active {
+  background-color: var(--bg-surface);
+  color: var(--text-ink);
+  font-weight: 700;
+  border-bottom: 2px solid var(--wiz-crimson);
+}
+
+/* Modal Animations */
+.modal-overlay {
+  background-color: rgba(12, 13, 14, 0.6);
+  backdrop-filter: blur(2px);
+  transition: opacity 0.2s ease;
+}
+
+/* Pulsing Badge */
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.05); }
+}
+.pulse-badge {
+  animation: pulse-red 2s infinite ease-in-out;
+}

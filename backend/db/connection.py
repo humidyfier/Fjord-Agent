@@ -5,6 +5,7 @@ and algo.SPpaths graph traversal execution.
 """
 
 import os
+import time
 from typing import Any, Dict, List, Optional
 from collections import OrderedDict
 from falkordb import FalkorDB, Graph
@@ -73,11 +74,15 @@ class FalkorDBManager:
             self.client.connection.execute_command("GRAPH.COPY", src_graph, dst_graph)
             return True
         except redis.exceptions.ResponseError as e:
-            # Handle out of memory error
-            if "OOM" in str(e).upper() or "MAXMEMORY" in str(e).upper():
+            err_str = str(e).upper()
+            if "OOM" in err_str or "MAXMEMORY" in err_str or "COULD NOT FORK" in err_str:
                 self._evict_oldest_unused_snapshot()
-                self.client.connection.execute_command("GRAPH.COPY", src_graph, dst_graph)
-                return True
+                time.sleep(0.1)
+                try:
+                    self.client.connection.execute_command("GRAPH.COPY", src_graph, dst_graph)
+                    return True
+                except Exception:
+                    pass
             raise
 
     def delete_graph(self, graph_name: str) -> bool:

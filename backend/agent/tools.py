@@ -459,7 +459,7 @@ def simulate_fix_in_sandbox(
     if candidate_ids:
         actions = [a for a in actions if a.action_id in candidate_ids]
 
-    sandbox_mgr = SandboxManager(auto_cleanup=False)
+    sandbox_mgr = SandboxManager(auto_cleanup=True)
     report = sandbox_mgr.simulate(
         src_graph=snapshot_sha,
         candidate_set_id=candidate_set_id,

@@ -2696,8 +2696,29 @@ async function handleIngestedFileContent(filename, textContent, fileSize) {
   }
 }
 
+function handleModalFileSelect(files) {
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  const nameInput = document.getElementById('upload-filename');
+  const contentArea = document.getElementById('upload-content');
+  const dropText = document.getElementById('modal-drop-text');
+
+  if (nameInput) nameInput.value = file.name;
+  if (dropText) dropText.textContent = `✓ Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    if (contentArea) contentArea.value = e.target.result;
+    showToast(`Loaded ${file.name} into form. Click "Ingest into Graph" or drop on canvas to auto-run.`, 'info');
+  };
+  reader.readAsText(file);
+}
+
 function setupDragAndDrop() {
   const overlay = document.getElementById('graph-drop-overlay');
+  const headerBtn = document.getElementById('btn-header-upload');
+  const headerLabel = document.getElementById('header-upload-label');
+  const modalDropZone = document.getElementById('modal-drop-zone');
   let dragCounter = 0;
 
   function preventDefault(e) {
@@ -2715,6 +2736,10 @@ function setupDragAndDrop() {
     preventDefault(e);
     dragCounter++;
     if (overlay) overlay.style.display = 'flex';
+    if (headerBtn) {
+      headerBtn.classList.add('btn-drop-active');
+      if (headerLabel) headerLabel.textContent = 'DROP HERE';
+    }
   });
 
   window.addEventListener('dragover', (e) => {
@@ -2725,6 +2750,10 @@ function setupDragAndDrop() {
     if (overlay && overlay.style.display === 'none') {
       overlay.style.display = 'flex';
     }
+    if (headerBtn && !headerBtn.classList.contains('btn-drop-active')) {
+      headerBtn.classList.add('btn-drop-active');
+      if (headerLabel) headerLabel.textContent = 'DROP HERE';
+    }
   });
 
   window.addEventListener('dragleave', (e) => {
@@ -2733,6 +2762,10 @@ function setupDragAndDrop() {
     if (dragCounter <= 0) {
       dragCounter = 0;
       if (overlay) overlay.style.display = 'none';
+      if (headerBtn) {
+        headerBtn.classList.remove('btn-drop-active');
+        if (headerLabel) headerLabel.textContent = '+ UPLOAD';
+      }
     }
   });
 
@@ -2740,6 +2773,10 @@ function setupDragAndDrop() {
     preventDefault(e);
     dragCounter = 0;
     if (overlay) overlay.style.display = 'none';
+    if (headerBtn) {
+      headerBtn.classList.remove('btn-drop-active');
+      if (headerLabel) headerLabel.textContent = '+ UPLOAD';
+    }
 
     const files = e.dataTransfer ? e.dataTransfer.files : [];
     if (!files || files.length === 0) return;
@@ -2759,6 +2796,51 @@ function setupDragAndDrop() {
       }
     }
   });
+
+  // Dedicated Button Drag Target
+  if (headerBtn) {
+    headerBtn.addEventListener('dragover', (e) => {
+      preventDefault(e);
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      headerBtn.classList.add('btn-drop-active');
+      if (headerLabel) headerLabel.textContent = 'DROP HERE';
+    });
+    headerBtn.addEventListener('dragleave', (e) => {
+      preventDefault(e);
+    });
+    headerBtn.addEventListener('drop', async (e) => {
+      preventDefault(e);
+      headerBtn.classList.remove('btn-drop-active');
+      if (headerLabel) headerLabel.textContent = '+ UPLOAD';
+      const files = e.dataTransfer ? e.dataTransfer.files : [];
+      if (files && files.length > 0) {
+        const file = files[0];
+        const text = await file.text();
+        await handleIngestedFileContent(file.name, text, file.size);
+      }
+    });
+  }
+
+  // Modal Drop Zone Target
+  if (modalDropZone) {
+    modalDropZone.addEventListener('dragover', (e) => {
+      preventDefault(e);
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      modalDropZone.classList.add('modal-drop-active');
+    });
+    modalDropZone.addEventListener('dragleave', (e) => {
+      preventDefault(e);
+      modalDropZone.classList.remove('modal-drop-active');
+    });
+    modalDropZone.addEventListener('drop', async (e) => {
+      preventDefault(e);
+      modalDropZone.classList.remove('modal-drop-active');
+      const files = e.dataTransfer ? e.dataTransfer.files : [];
+      if (files && files.length > 0) {
+        handleModalFileSelect(files);
+      }
+    });
+  }
 
   // Canvas element drop target
   const canvasEl = document.getElementById('wiz-attack-canvas');
@@ -2780,3 +2862,4 @@ if (typeof document !== 'undefined') {
     setupResizeObserver();
   }
 }
+

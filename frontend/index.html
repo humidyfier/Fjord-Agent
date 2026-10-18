@@ -210,15 +210,10 @@
         <!-- Top Bar Action Controls (Strict Single-Line Flexbox) -->
         <div class="flex items-center space-x-1.5 shrink-0 whitespace-nowrap">
           
-          <!-- Dropzone Pill in Header Toolbar -->
-          <button onclick="openUploadModal()" id="header-dropzone-pill" title="Drag and drop .yaml or .json files anywhere, or click to upload" class="px-2.5 py-1 rounded text-xs font-mono font-bold flex items-center space-x-1.5 whitespace-nowrap shrink-0">
-            <span>📥 Drag &amp; Drop .YAML / .JSON or Click to Upload</span>
-          </button>
-
-          <!-- Upload Button -->
-          <button onclick="openUploadModal()" title="Upload Manifest or Scan" class="px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-xs font-mono font-bold transition flex items-center space-x-1 shadow-sm whitespace-nowrap shrink-0">
+          <!-- Upload Button & Direct Drag-and-Drop Target -->
+          <button onclick="openUploadModal()" id="btn-header-upload" title="Upload Manifest or Scan (.yaml / .json) — or drag and drop files directly onto this button" class="px-2.5 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-xs font-mono font-bold transition flex items-center space-x-1.5 shadow-sm whitespace-nowrap shrink-0">
             <i class="fa-solid fa-cloud-arrow-up text-wiz-blue text-[10px]"></i>
-            <span>+ UPLOAD</span>
+            <span id="header-upload-label">+ UPLOAD</span>
           </button>
 
           <!-- Run Remediation Agent Button -->
@@ -883,13 +878,21 @@
         <button onclick="closeUploadModal()" class="text-archival-muted hover:text-archival-ink font-bold text-sm">✕</button>
       </div>
       <div class="space-y-3">
+        <!-- Interactive Drag & Drop Box inside Modal -->
+        <div id="modal-drop-zone" class="p-4 rounded-lg border-2 border-dashed border-archival-border hover:border-wiz-blue bg-archival-bg text-center cursor-pointer transition space-y-1" onclick="document.getElementById('modal-file-input').click()">
+          <input type="file" id="modal-file-input" class="hidden" accept=".yaml,.yml,.json" onchange="handleModalFileSelect(this.files)">
+          <div class="text-wiz-blue text-xl"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+          <div class="text-[11px] font-bold text-archival-ink" id="modal-drop-text">Click to browse or drag &amp; drop .yaml / .json here</div>
+          <div class="text-[9px] text-archival-muted">Supports Kubernetes manifests &amp; Trivy vulnerability scans</div>
+        </div>
+
         <div>
           <label class="block text-[11px] text-archival-muted font-bold mb-1">FILE NAME</label>
           <input type="text" id="upload-filename" value="custom-deployment.yaml" class="w-full p-2 text-xs font-mono rounded arch-border bg-archival-bg text-archival-ink">
         </div>
         <div>
           <label class="block text-[11px] text-archival-muted font-bold mb-1">PASTE YAML / JSON MANIFEST</label>
-          <textarea id="upload-content" rows="8" class="w-full p-2 text-[10px] font-mono rounded arch-border bg-archival-bg text-archival-ink focus:outline-none" placeholder="Paste Kubernetes YAML or Trivy JSON..."></textarea>
+          <textarea id="upload-content" rows="7" class="w-full p-2 text-[10px] font-mono rounded arch-border bg-archival-bg text-archival-ink focus:outline-none" placeholder="Paste Kubernetes YAML or Trivy JSON..."></textarea>
         </div>
       </div>
       <div class="flex justify-end space-x-2 pt-2">

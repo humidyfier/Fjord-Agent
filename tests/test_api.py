@@ -871,15 +871,17 @@ def test_drag_and_drop_overlay_and_demo_files():
     assert res_json.status_code == 200
     assert res_json.json()["status"] == "INGESTED"
 
-    # Verify index.html contains overlay and header pill
+    # Verify index.html contains overlay, direct upload button target, and modal drop zone
     index_html = Path("frontend/index.html").read_text(encoding="utf-8")
     assert "graph-drop-overlay" in index_html
-    assert "header-dropzone-pill" in index_html
+    assert "btn-header-upload" in index_html
+    assert "modal-drop-zone" in index_html
     assert "DROP KUBERNETES .YAML OR TRIVY/K8S .JSON HERE" in index_html
 
     # Verify app.js contains drag-and-drop listeners
     app_js = Path("frontend/app.js").read_text(encoding="utf-8")
     assert "setupDragAndDrop" in app_js
     assert "handleIngestedFileContent" in app_js
-    assert "graph-drop-overlay" in app_js
+    assert "handleModalFileSelect" in app_js
+    assert "btn-header-upload" in app_js
 

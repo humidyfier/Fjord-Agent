@@ -931,9 +931,10 @@ function renderUnifiedGraph(data) {
     displayNodes = allNodes.filter(n => {
       if (n.label === 'VirtualSource' || n.label === 'VirtualSink' || n.id.includes('virtual-super-')) return false;
       if (n.is_attack_path) return true;
-      if (isEntryPoint(n)) return true;
-      if (isCrownJewel(n) && (n.is_attack_path || allNodes.filter(isCrownJewel).length <= 2)) return true;
-      if ((isFinding(n) || isIdentity(n)) && (attackEdgeSources.has(n.id) || attackEdgeTargets.has(n.id) || n.is_attack_path)) return true;
+      if (attackPathCount === 0) {
+        if (isEntryPoint(n) || isCrownJewel(n)) return true;
+      }
+      if ((isFinding(n) || isIdentity(n)) && (attackEdgeSources.has(n.id) || attackEdgeTargets.has(n.id))) return true;
       return false;
     });
 
@@ -1040,13 +1041,26 @@ function renderUnifiedGraph(data) {
 
     nodesInCol.forEach((node, i) => {
       let y;
-      if (count === 1) {
-        y = yCenter;
-      } else if (count === 2) {
-        y = i === 0 ? yCenter - 70 : yCenter + 70;
+      if (!isFullMode) {
+        if (count === 1) {
+          y = yCenter;
+        } else {
+          // In attack path view, the attack path node stays centered on yCenter
+          if (node.is_attack_path) {
+            y = yCenter;
+          } else {
+            y = yCenter + (i === 0 ? -90 : 90);
+          }
+        }
       } else {
-        // Absolute vertical alignment: 60 + i * 68
-        y = 60 + i * 68;
+        if (count === 1) {
+          y = yCenter;
+        } else if (count === 2) {
+          y = i === 0 ? yCenter - 70 : yCenter + 70;
+        } else {
+          // Absolute vertical alignment: 60 + i * 68
+          y = 60 + i * 68;
+        }
       }
 
       // Determine accurate Kubernetes styling & metadata
@@ -1165,13 +1179,15 @@ function renderUnifiedGraph(data) {
     const edgeKey = `${edge.source}->${edge.target}`;
     if (renderedEdgePairs.has(edgeKey)) return;
 
-    // In Multi-Branch Full Graph, suppress implicit CNI mesh edges unless on attack path
+    // Suppress synthetic solver exploit-step shortcuts in visual canvas unless active attack path
+    if (edge.type === 'EXPLOIT_STEP' && !edge.is_attack_path) return;
+    // Suppress mesh lateral chatter unless on attack path
+    if (edge.type === 'CAN_REACH_NET' && !edge.is_attack_path) return;
     if (edge.properties?.implicit_cni && !edge.is_attack_path) return;
-    if (edge.type === 'CAN_REACH_NET' && !edge.is_attack_path && displayNodes.length > 10) return;
 
     renderedEdgePairs.add(edgeKey);
 
-    const R = 32;
+    const R = 28;
     const startX = srcPos.x + R;
     const startY = srcPos.y;
     const endX = dstPos.x - R;
@@ -1252,30 +1268,18 @@ function renderUnifiedGraph(data) {
     nodesLayer.appendChild(el);
   });
 
-  // Dynamic SVG viewBox configuration for auto-fit scaling
+  // Ensure SVG coordinate space matches HTML nodes layer 1:1 without viewBox distortion
   const svgLayer = document.getElementById('wiz-svg-layer');
   if (svgLayer) {
-    const allPos = Object.values(nodePositions);
-    let minX = 0, minY = 0, maxX = 1200, maxY = 600;
-    if (allPos.length > 0) {
-      minX = Math.min(...allPos.map(p => p.x - (p.radius || 32)));
-      maxX = Math.max(...allPos.map(p => p.x + (p.radius || 32)));
-      minY = Math.min(...allPos.map(p => p.y - (p.radius || 32)));
-      maxY = Math.max(...allPos.map(p => p.y + (p.radius || 32)));
-    }
-    const vbX = Math.max(0, minX - 50);
-    const vbY = Math.max(0, minY - 50);
-    const vbW = (maxX - minX) + 100;
-    const vbH = (maxY - minY) + 100;
-    svgLayer.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
-    svgLayer.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svgLayer.removeAttribute('viewBox');
+    svgLayer.removeAttribute('preserveAspectRatio');
   }
 
   // Bounding-box auto-fit if graph has multiple nodes
-  if (displayNodes.length > 6) {
+  if (displayNodes.length > 4) {
     fitWizBoundingBox(nodePositions, container.clientWidth || 800, container.clientHeight || 500);
   } else {
-    applyWizTransform();
+    resetWizCanvas();
   }
 }
 

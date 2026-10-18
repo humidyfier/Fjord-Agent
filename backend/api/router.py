@@ -557,19 +557,83 @@ def get_graph_topology(
             p_nodes = path_obj.nodes() if callable(getattr(path_obj, "nodes", None)) else getattr(path_obj, "nodes", [])
             for i in range(len(p_nodes)):
                 n_id = _extract_node_id(p_nodes[i])
-                attack_node_ids.add(n_id)
+                if not n_id.startswith("virtual-super-"):
+                    attack_node_ids.add(n_id)
                 if i < len(p_nodes) - 1:
                     next_id = _extract_node_id(p_nodes[i + 1])
-                    attack_edge_pairs.add((n_id, next_id))
+                    if not n_id.startswith("virtual-super-") and not next_id.startswith("virtual-super-"):
+                        attack_edge_pairs.add((n_id, next_id))
         except Exception:
             pass
 
+    # Helper for robust ID matching (with or without namespace prefix)
+    def _id_matches(a, b):
+        return a == b or a.split("/")[-1] == b.split("/")[-1]
+
+    # Expand physical Layer-1 Kubernetes routing between EntryPoint and Workload
+    # (e.g. EntryPoint -> Ingress -> Service -> Workload)
+    expanded_pairs = set(attack_edge_pairs)
+    for (src_id, dst_id) in list(attack_edge_pairs):
+        # 1. EntryPoint -> Ingress -> Service -> Workload
+        matching_ing = [e["target"] for e in edges if _id_matches(e["source"], src_id) and e["type"] in ("EXPOSES", "ROUTES_TO")]
+        expanded = False
+        for ing_id in matching_ing:
+            matching_svc = [e["target"] for e in edges if _id_matches(e["source"], ing_id) and e["type"] in ("ROUTES_TO", "SELECTS")]
+            for svc_id in matching_svc:
+                has_wk = any(_id_matches(e["target"], dst_id) and e["type"] in ("SELECTS", "ROUTES_TO") for e in edges if _id_matches(e["source"], svc_id))
+                if has_wk:
+                    attack_node_ids.add(ing_id)
+                    attack_node_ids.add(svc_id)
+                    expanded_pairs.add((src_id, ing_id))
+                    expanded_pairs.add((ing_id, svc_id))
+                    expanded_pairs.add((svc_id, dst_id))
+                    expanded_pairs.discard((src_id, dst_id))
+                    expanded = True
+                    break
+            if expanded:
+                break
+
+        if not expanded:
+            # 2. EntryPoint -> Service -> Workload
+            for svc_id in matching_ing:
+                has_wk = any(_id_matches(e["target"], dst_id) and e["type"] in ("SELECTS", "ROUTES_TO") for e in edges if _id_matches(e["source"], svc_id))
+                if has_wk:
+                    attack_node_ids.add(svc_id)
+                    expanded_pairs.add((src_id, svc_id))
+                    expanded_pairs.add((svc_id, dst_id))
+                    expanded_pairs.discard((src_id, dst_id))
+                    expanded = True
+                    break
+
+        if not expanded:
+            # 3. Workload -> Service -> Workload lateral pivot
+            matching_svc = [e["target"] for e in edges if _id_matches(e["source"], src_id) and e["type"] in ("CAN_REACH_NET", "ROUTES_TO", "REQUIRED_DEPENDENCY")]
+            for svc_id in matching_svc:
+                has_wk = any(_id_matches(e["target"], dst_id) and e["type"] in ("SELECTS", "ROUTES_TO") for e in edges if _id_matches(e["source"], svc_id))
+                if has_wk:
+                    attack_node_ids.add(svc_id)
+                    expanded_pairs.add((src_id, svc_id))
+                    expanded_pairs.add((svc_id, dst_id))
+                    expanded_pairs.discard((src_id, dst_id))
+                    expanded = True
+                    break
+
+    attack_edge_pairs = expanded_pairs
+
+    def _pair_in_attack_edges(src, dst):
+        if (src, dst) in attack_edge_pairs:
+            return True
+        for (asrc, adst) in attack_edge_pairs:
+            if _id_matches(asrc, src) and _id_matches(adst, dst):
+                return True
+        return False
+
     for n in nodes:
-        if n["id"] in attack_node_ids:
+        if n["id"] in attack_node_ids or any(_id_matches(n["id"], aid) for aid in attack_node_ids):
             n["is_attack_path"] = True
 
     for e in edges:
-        if (e["source"], e["target"]) in attack_edge_pairs and not e.get("is_severed"):
+        if _pair_in_attack_edges(e["source"], e["target"]) and not e.get("is_severed"):
             e["is_attack_path"] = True
 
     # Build Cytoscape.js elements array

@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-app
+  namespace: prod
+  labels:
+    app: frontend
+    env: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        env: production
+    spec:
+      serviceAccountName: frontend-sa
+      containers:
+      - name: web
+        image: nginx:1.19
+        ports:
+        - containerPort: 80
+        env:
+        - name: BACKEND_URL
+          value: "http://backend-api.prod:8080"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-svc
+  namespace: prod
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+  namespace: prod
+  labels:
+    app: backend-api
+    tier: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-api
+  template:
+    metadata:
+      labels:
+        app: backend-api
+        tier: api
+    spec:
+      serviceAccountName: backend-sa
+      containers:
+      - name: api
+        image: python:3.9-slim
+        ports:
+        - containerPort: 8080
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+      volumes:
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-api
+  namespace: prod
+spec:
+  selector:
+    app: backend-api
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend-sa
+  namespace: prod
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/FjordCloudDataAccessor"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-secrets-viewer
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backend-secrets-binding
+subjects:
+- kind: ServiceAccount
+  name: backend-sa
+  namespace: prod
+roleRef:
+  kind: ClusterRole
+  name: cluster-secrets-viewer
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: database-credentials
+  namespace: prod
+type: Opaque
+data:
+  password: "c3VwZXJzZWNyZXQ="

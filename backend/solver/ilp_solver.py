@@ -155,6 +155,33 @@ class CuttingPlaneILPSolver:
                 forbidden=forbidden,
             ))
 
+        # --- Candidate class 1b: Network Policy ingress isolation on exposed workloads (sever Service/Ingress exposure) ---
+        exposed_workloads = db_manager.query(
+            self.graph_name,
+            """
+            MATCH (ep:EntryPoint)-[:EXPOSES]->(s:Service)-[:SELECTS]->(w:Workload)
+            RETURN ep.id AS ep_id, s.id AS svc_id, w.id AS wid
+            """,
+            read_only=True,
+        )
+        for row in exposed_workloads:
+            ep_id, svc_id, wid = str(row[0]), str(row[1]), str(row[2])
+            w_ns, w_name = _parse_workload_id(wid)
+            edge_key = f"{ep_id}-->{wid}"
+            actions.append(RemediationAction(
+                action_id=f"netpol_isolate_{w_name}_{uuid.uuid4().hex[:6]}",
+                remediation_type=RemediationType.NETWORK_POLICY_ADD,
+                description=f"Add NetworkPolicy isolating exposed workload {wid}",
+                mutation_cypher=(
+                    "MATCH (s:Service)-[r:SELECTS]->(w:Workload {id: $wid}) "
+                    "DELETE r"
+                ),
+                mutation_params={"wid": wid, "src_id": ep_id, "dst_id": wid},
+                severs_edge_keys=[edge_key, f"{svc_id}-->{wid}"],
+                disruption_cost=1.2,
+                forbidden=False,
+            ))
+
         # --- Candidate class 2: RBAC unbind (sever BOUND_TO edges) ---
         rbac_edges = db_manager.query(
             self.graph_name,
@@ -202,7 +229,7 @@ class CuttingPlaneILPSolver:
                 forbidden=False,
             ))
 
-        # --- Candidate class 3: Remove hostPath mount (sever MOUNTS_HOST edges) ---
+        # --- Candidate class 3: Workload hardening & hostPath removal (sever MOUNTS_HOST / CAN_ACCESS edges) ---
         host_mount_edges = db_manager.query(
             self.graph_name,
             """
@@ -215,16 +242,28 @@ class CuttingPlaneILPSolver:
             wl_id, node_id, host_path = str(row[0]), str(row[1]), str(row[2])
             edge_key = f"{wl_id}-->{node_id}"
             cost = REMEDIATION_BASE_COSTS[RemediationType.WORKLOAD_HARDEN_SECURITY_CONTEXT]
+
+            # Also check if this workload directly reaches crown jewels
+            severs_keys = [edge_key]
+            cj_rows = db_manager.query(
+                self.graph_name,
+                "MATCH (w:Workload {id: $wid})-[:CAN_ACCESS|HOSTS_WORKLOAD|MOUNTS_SECRET]->(cj:CrownJewel) RETURN cj.id",
+                params={"wid": wl_id},
+                read_only=True
+            )
+            for cjr in cj_rows:
+                severs_keys.append(f"{wl_id}-->{cjr[0]}")
+
             actions.append(RemediationAction(
                 action_id=f"harden_mount_{wl_id.replace('/', '_')}_{uuid.uuid4().hex[:6]}",
                 remediation_type=RemediationType.WORKLOAD_HARDEN_SECURITY_CONTEXT,
-                description=f"Remove hostPath mount {host_path} from workload {wl_id}",
+                description=f"Remove hostPath mount {host_path} and harden {wl_id}",
                 mutation_cypher=(
                     "MATCH (w:Workload {id: $wl_id})-[m:MOUNTS_HOST]->(wn:WorkerNode {id: $node_id}) "
                     "DELETE m"
                 ),
                 mutation_params={"wl_id": wl_id, "node_id": node_id},
-                severs_edge_keys=[edge_key],
+                severs_edge_keys=severs_keys,
                 disruption_cost=cost,
                 forbidden=False,
             ))
@@ -323,6 +362,7 @@ class CuttingPlaneILPSolver:
         self,
         candidates: List[RemediationAction],
         max_iterations: Optional[int] = None,
+        validate_in_sandbox: bool = True,
     ) -> SolverResult:
         """
         Run the Cutting-Plane ILP loop until all attack paths are hit or
@@ -403,7 +443,7 @@ class CuttingPlaneILPSolver:
                     n=n,
                 )
                 total_pure_milp_ms += m_time
-            except ValueError as exc:
+            except (ValueError, OSError, Exception) as exc:
                 logger.error("MILP infeasible: %s", exc)
                 solver_status = "infeasible"
                 break
@@ -416,7 +456,11 @@ class CuttingPlaneILPSolver:
             )
 
             # 4. Counterfactual validation: simulate selected candidates in an ephemeral sandbox
-            # to check if any alternative attack paths survive
+            # to check if any alternative attack paths survive (if validate_in_sandbox is enabled)
+            if not validate_in_sandbox:
+                solver_status = "optimal"
+                break
+
             sim_sandbox = f"sandbox_ilp_{uuid.uuid4().hex[:10]}"
             try:
                 ok = db_manager.copy_graph(self.graph_name, sim_sandbox)
@@ -517,29 +561,40 @@ class CuttingPlaneILPSolver:
         Returns (list of selected column indices, objective value, execution_time_ms).
         Raises ValueError if infeasible.
         """
-        # Stack constraint matrix
-        A = np.vstack(cut_rows)                  # shape (num_cuts, n)
-        lb = np.ones(len(cut_rows), dtype=float) # every path must be hit (>= 1)
-        ub = np.full(len(cut_rows), np.inf)      # no upper bound on coverage
+        if not cut_rows or n == 0 or len(costs) == 0:
+            raise ValueError("No valid constraints or variables to solve MILP.")
+
+        # Stack constraint matrix safely
+        A = np.vstack(cut_rows).astype(np.float64)  # shape (num_cuts, n)
+        if A.shape[1] != n or A.shape[0] == 0:
+            raise ValueError(f"Constraint matrix shape mismatch: {A.shape} vs n={n}")
+
+        lb = np.ones(A.shape[0], dtype=np.float64)  # every path must be hit (>= 1)
+        ub = np.full(A.shape[0], np.inf, dtype=np.float64)  # no upper bound on coverage
 
         constraints = LinearConstraint(A, lb=lb, ub=ub)
-        bounds = Bounds(lb=0.0, ub=1.0)           # 0 <= x_m <= 1
-        integrality = np.ones(n, dtype=int)       # all variables are binary integers
+        bounds = Bounds(lb=np.zeros(n, dtype=np.float64), ub=np.ones(n, dtype=np.float64))  # 0 <= x_m <= 1
+        integrality = np.ones(n, dtype=int)  # all variables are binary integers
+        c_vector = np.ascontiguousarray(costs, dtype=np.float64)
 
         start_m = time.perf_counter()
-        res = milp(
-            c=costs,
-            constraints=constraints,
-            integrality=integrality,
-            bounds=bounds,
-        )
+        try:
+            res = milp(
+                c=c_vector,
+                constraints=constraints,
+                integrality=integrality,
+                bounds=bounds,
+            )
+        except Exception as exc:
+            raise ValueError(f"scipy.optimize.milp execution error: {exc}") from exc
+
         duration_ms = (time.perf_counter() - start_m) * 1000
 
-        if res.status not in (0, 1):  # 0=optimal, 1=iteration limit (acceptable approx)
-            raise ValueError(f"MILP infeasible or unbounded: {res.message}")
+        if res is None or res.status not in (0, 1) or res.x is None:  # 0=optimal, 1=iteration limit
+            raise ValueError(f"MILP infeasible or unbounded: {getattr(res, 'message', 'No solution found')}")
 
         # Collect selected indices (x_m rounded to nearest integer)
-        selected = [i for i, val in enumerate(res.x) if round(val) == 1]
+        selected = [i for i, val in enumerate(res.x) if round(float(val)) == 1]
         return selected, float(res.fun), duration_ms
 
     def _get_active_paths(self, graph_name: str) -> List[List[str]]:

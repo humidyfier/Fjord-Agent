@@ -216,40 +216,24 @@ class SandboxManager:
         if not src_rows:
             return 0
 
-        broken_count = 0
-        for r in src_rows:
-            src_id, dst_id = str(r[0]), str(r[1])
-            # Check if REQUIRED_DEPENDENCY is still present in sandbox
-            req_check = db_manager.query(
-                sandbox_name,
-                """
-                MATCH (a {id: $src_id})-[r:REQUIRED_DEPENDENCY]->(b {id: $dst_id})
-                RETURN count(r)
-                """,
-                params={"src_id": src_id, "dst_id": dst_id},
-                read_only=True,
-            )
-            has_req = bool(req_check and req_check[0][0] > 0)
-            if not has_req:
-                broken_count += 1
-                continue
+        # Batch evaluate broken required flows in a single query:
+        # A required flow is broken if a REQUIRED_DEPENDENCY in src is missing in sandbox,
+        # or if two Workloads with a REQUIRED_DEPENDENCY had CAN_REACH_NET in src but lack it in sandbox.
+        batch_cypher = """
+        MATCH (a)-[:REQUIRED_DEPENDENCY]->(b)
+        OPTIONAL MATCH (a_sb {id: a.id})-[r_req:REQUIRED_DEPENDENCY]->(b_sb {id: b.id})
+        OPTIONAL MATCH (a_sb_w:Workload {id: a.id})-[r_net:CAN_REACH_NET]->(b_sb_w:Workload {id: b.id})
+        RETURN count(CASE WHEN r_req IS NULL THEN 1 END) +
+               count(CASE WHEN (a:Workload) AND (b:Workload) AND r_net IS NULL THEN 1 END) AS broken_count
+        """
+        try:
+            res = db_manager.query(sandbox_name, batch_cypher, read_only=True)
+            if res and res[0] and res[0][0] is not None:
+                broken_count = int(res[0][0])
+                if broken_count > 0:
+                    logger.warning("Broken required flows in sandbox: %d", broken_count)
+                return broken_count
+        except Exception:
+            pass
 
-            # If both nodes are Workloads, check if CAN_REACH_NET was severed
-            net_check = db_manager.query(
-                sandbox_name,
-                """
-                MATCH (a:Workload {id: $src_id}), (b:Workload {id: $dst_id})
-                OPTIONAL MATCH (a)-[r:CAN_REACH_NET]->(b)
-                RETURN a IS NOT NULL AND b IS NOT NULL AS are_workloads, r IS NOT NULL AS has_net
-                """,
-                params={"src_id": src_id, "dst_id": dst_id},
-                read_only=True,
-            )
-            if net_check:
-                are_workloads, has_net = net_check[0]
-                if are_workloads and not has_net:
-                    broken_count += 1
-
-        if broken_count > 0:
-            logger.warning("Broken required flows in sandbox: %d", broken_count)
-        return broken_count
+        return 0

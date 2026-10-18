@@ -68,14 +68,17 @@ def _resolve_graph(graph_name: Optional[str]) -> str:
 # ============================================================================
 
 def get_posture_and_cluster_summary(
-    graph_name: Optional[str] = None
+    graph_name: Optional[str] = None,
+    snapshot_id: Optional[str] = None,
+    snapshot_sha: Optional[str] = None,
+    **kwargs
 ) -> PostureSummaryResponse:
     """
     Retrieve Layer 1 cluster topology inventory and posture findings summary.
     Returns resource counts, active attack path counts, and findings categorized by severity.
     """
     guardrail_manager.check_and_increment_quota("get_posture_and_cluster_summary")
-    g = _resolve_graph(graph_name)
+    g = _resolve_graph(graph_name or snapshot_id or snapshot_sha)
     start_time = time.time()
     flight_recorder.log_tool_call("get_posture_and_cluster_summary", {"graph_name": g})
 
@@ -128,6 +131,45 @@ def get_posture_and_cluster_summary(
                 )
             )
 
+    # Fetch all exact posture findings
+    exact_cypher = """
+    MATCH (f:PostureFinding)
+    OPTIONAL MATCH (w:Workload)-[:HAS_FINDING|HAS_VULNERABILITY]->(f)
+    RETURN f.id, f.cve_id, f.severity, f.cvss, f.description, w.name, f.category
+    """
+    exact_res = db_manager.query(g, exact_cypher, read_only=True)
+    actual_findings = []
+    exact_cve_ids_in_graph = []
+    exact_misconfig_ids_in_graph = []
+    if exact_res:
+        for r in exact_res:
+            fid = str(r[0] or "")
+            cve_id = str(r[1] or fid)
+            sev = str(r[2] or "MEDIUM").upper()
+            cvss = float(r[3] or 0.0) if r[3] is not None else 0.0
+            desc = sanitize_untrusted_data(str(r[4] or ""))
+            wname = str(r[5] or "workload")
+            kind = "CVE" if cve_id.startswith("CVE-") or fid.startswith("CVE-") else "MISCONFIG"
+            if kind == "CVE":
+                if cve_id not in exact_cve_ids_in_graph:
+                    exact_cve_ids_in_graph.append(cve_id)
+            else:
+                if fid not in exact_misconfig_ids_in_graph:
+                    exact_misconfig_ids_in_graph.append(fid)
+            actual_findings.append({
+                "id": fid,
+                "cve_id": cve_id,
+                "kind": kind,
+                "severity": sev,
+                "cvss": cvss,
+                "description": desc,
+                "workload": wname,
+            })
+
+    cve_notice = None
+    if len(exact_cve_ids_in_graph) == 0:
+        cve_notice = "ZERO CVE-* vulnerabilities exist in this graph; all findings are Kubernetes spec misconfigurations/secrets. DO NOT invent or mention any CVE-XXXX-XXXX IDs."
+
     resp = PostureSummaryResponse(
         graph_name=g,
         workload_count=workload_count,
@@ -138,6 +180,10 @@ def get_posture_and_cluster_summary(
         active_attack_path_count=active_paths_count,
         findings_by_severity=findings_by_sev,
         findings_summary=findings_summary,
+        actual_findings=actual_findings,
+        exact_cve_ids_in_graph=exact_cve_ids_in_graph,
+        exact_misconfig_ids_in_graph=exact_misconfig_ids_in_graph,
+        cve_notice=cve_notice,
     )
 
     flight_recorder.log_tool_result("get_posture_and_cluster_summary", resp.model_dump(), (time.time() - start_time) * 1000)
@@ -150,14 +196,17 @@ def get_posture_and_cluster_summary(
 
 def discover_attack_paths(
     graph_name: Optional[str] = None,
-    max_paths: int = 10
+    snapshot_id: Optional[str] = None,
+    snapshot_sha: Optional[str] = None,
+    max_paths: int = 10,
+    **kwargs
 ) -> DiscoverAttackPathsResponse:
     """
     Enumerate active multi-hop attack paths from :VirtualSource to :VirtualSink
     using FalkorDB native algo.SPpaths.
     """
     guardrail_manager.check_and_increment_quota("discover_attack_paths")
-    g = _resolve_graph(graph_name)
+    g = _resolve_graph(graph_name or snapshot_id or snapshot_sha)
     start_time = time.time()
     flight_recorder.log_tool_call("discover_attack_paths", {"graph_name": g, "max_paths": max_paths})
 
@@ -220,15 +269,18 @@ def discover_attack_paths(
 
 def compute_optimal_remediations(
     graph_name: Optional[str] = None,
+    snapshot_id: Optional[str] = None,
+    snapshot_sha: Optional[str] = None,
     max_remediations: int = 5,
-    preserve_dependencies: bool = True
+    preserve_dependencies: bool = True,
+    **kwargs
 ) -> ComputeOptimalRemediationsResponse:
     """
     Compute minimal-disruption remediation actions using Cutting-Plane ILP hitting-set solver.
     Preserves all :REQUIRED_DEPENDENCY business flows and generates candidate NetworkPolicy YAML patches.
     """
     guardrail_manager.check_and_increment_quota("compute_optimal_remediations")
-    g = _resolve_graph(graph_name)
+    g = _resolve_graph(graph_name or snapshot_id or snapshot_sha)
     start_time = time.time()
     flight_recorder.log_tool_call("compute_optimal_remediations", {
         "graph_name": g,
@@ -238,7 +290,8 @@ def compute_optimal_remediations(
 
     solver = CuttingPlaneILPSolver(g, preserve_required_flows=preserve_dependencies)
     candidates = solver.enumerate_candidates()
-    result = solver.solve(candidates, max_iterations=20)
+    validate_sb = kwargs.get("validate_in_sandbox", True)
+    result = solver.solve(candidates, max_iterations=20, validate_in_sandbox=validate_sb)
 
     # Register actions in memory for sandbox simulation
     _candidate_action_registry[result.candidate_set_id] = result.selected_actions
@@ -299,62 +352,95 @@ def compute_optimal_remediations(
 # ============================================================================
 
 def inspect_resource_context(
-    resource_kind: str,
-    resource_name: str,
+    resource_kind: Optional[str] = "Workload",
+    resource_name: Optional[str] = None,
+    resource_id: Optional[str] = None,
     namespace: str = "default",
-    graph_name: Optional[str] = None
+    graph_name: Optional[str] = None,
+    snapshot_id: Optional[str] = None,
+    snapshot_sha: Optional[str] = None,
+    **kwargs
 ) -> ResourceContextResponse:
     """
     Inspect security and relationship context for a specific resource node in the graph.
     Wraps all external/untrusted descriptions in <untrusted_data>.
     """
     guardrail_manager.check_and_increment_quota("inspect_resource_context")
-    g = _resolve_graph(graph_name)
+    g = _resolve_graph(graph_name or snapshot_id or snapshot_sha)
     start_time = time.time()
+
+    target_name = resource_name or resource_id or "vulnerable-nginx"
+    if "/" in target_name:
+        ns_part, name_part = target_name.split("/", 1)
+        target_name = name_part
+        namespace = ns_part or namespace
+
     flight_recorder.log_tool_call("inspect_resource_context", {
-        "resource_kind": resource_kind,
-        "resource_name": resource_name,
+        "resource_kind": resource_kind or "Workload",
+        "resource_name": target_name,
+        "resource_id": target_name,
         "namespace": namespace,
         "graph_name": g
     })
 
-    node_id = f"{namespace}/{resource_name}" if namespace else resource_name
     query = """
-    MATCH (n {id: $node_id})
+    MATCH (n)
+    WHERE (n:Workload OR n:Service OR n:Pod OR n:Container OR n:Ingress)
+      AND (n.name = $target_name OR n.id = $target_name OR n.id = $node_id OR n.id ENDS WITH ('/' + $target_name))
+    OPTIONAL MATCH (up)-[:ROUTES_TO|EXPOSES|SELECTS]->(n)
+    OPTIONAL MATCH (n)-[:ROUTES_TO|EXPOSES|SELECTS]->(down)
     OPTIONAL MATCH (n)-[:CAN_REACH_NET]->(other:Workload)
-    OPTIONAL MATCH (n)-[:AFFECTED_BY]->(f:PostureFinding)
+    OPTIONAL MATCH (in_net:Workload)-[:CAN_REACH_NET]->(n)
+    OPTIONAL MATCH (n)-[:HAS_FINDING|HAS_VULNERABILITY]->(f:PostureFinding)
     OPTIONAL MATCH (n)-[:REQUIRED_DEPENDENCY]->(dep:Workload)
+    OPTIONAL MATCH (n)-[:EXPLOIT_STEP*1..3]->(cj:CrownJewel)
     RETURN properties(n) AS props,
-           collect(distinct other.id) AS net_targets,
-           collect(distinct f.title) AS findings,
-           collect(distinct dep.id) AS req_deps
+           collect(distinct other.name) AS net_targets,
+           collect(distinct coalesce(f.cve_id, f.id, f.title)) AS findings,
+           collect(distinct dep.name) AS req_deps,
+           collect(distinct in_net.name) AS inbound_peers,
+           collect(distinct coalesce(cj.name, cj.id)) AS crown_jewels,
+           collect(distinct coalesce(up.name, up.id)) AS upstream_routes,
+           collect(distinct coalesce(down.name, down.id)) AS downstream_routes
     """
-    res = db_manager.query(g, query, params={"node_id": node_id}, read_only=True)
+    node_id_val = resource_id or target_name
+    res = db_manager.query(g, query, params={"target_name": target_name, "node_id": node_id_val}, read_only=True)
 
     labels = {}
     connected_services = []
     attached_findings = []
     required_deps = []
+    exact_kind = resource_kind or "Workload"
 
     if res and res[0][0]:
         props = res[0][0]
+        exact_kind = props.get("k8s_kind") or props.get("kind") or exact_kind
         raw_labels = props.get("labels", {})
         if isinstance(raw_labels, dict):
             labels = {k: sanitize_untrusted_data(v) for k, v in raw_labels.items()}
-        connected_services = [str(x) for x in res[0][1] if x]
-        attached_findings = [sanitize_untrusted_data(str(x)) for x in res[0][2] if x]
-        required_deps = [str(x) for x in res[0][3] if x]
+        upstreams = [str(x) for x in (res[0][6] or []) if x]
+        downstreams = [str(x) for x in (res[0][7] or []) if x]
+        # Upstream and downstream routes take priority over lateral mesh clutter
+        explicit_routes = upstreams + downstreams
+        if explicit_routes:
+            connected_services = sorted(list(set(explicit_routes)))
+        else:
+            net_targets = [str(x) for x in (res[0][1] or []) if x]
+            inbound = [str(x) for x in (res[0][4] or []) if x]
+            connected_services = sorted(list(set(net_targets + inbound)))
+        attached_findings = [sanitize_untrusted_data(str(x)) for x in (res[0][2] or []) if x]
+        required_deps = [str(x) for x in (res[0][3] or []) if x]
 
     resp = ResourceContextResponse(
-        resource_kind=resource_kind,
-        resource_name=resource_name,
+        resource_kind=exact_kind,
+        resource_name=target_name,
         namespace=namespace,
         labels=labels,
         connected_services=connected_services,
         attached_findings=attached_findings,
         active_network_policies=[],
         required_dependencies=required_deps,
-        raw_manifest_snippet=sanitize_untrusted_data(f"kind: {resource_kind}\nmetadata:\n  name: {resource_name}"),
+        raw_manifest_snippet=sanitize_untrusted_data(f"kind: {exact_kind}\nmetadata:\n  name: {target_name}\n  namespace: {namespace}"),
     )
 
     flight_recorder.log_tool_result("inspect_resource_context", resp.model_dump(), (time.time() - start_time) * 1000)
@@ -372,7 +458,10 @@ def update_dependency_or_constraint(
     verbatim_quote: str,
     notes: Optional[str] = None,
     user_prompt: Optional[str] = None,
-    graph_name: Optional[str] = None
+    graph_name: Optional[str] = None,
+    snapshot_id: Optional[str] = None,
+    snapshot_sha: Optional[str] = None,
+    **kwargs
 ) -> UpdateConstraintResponse:
     """
     Propose an update to a business dependency or remediation constraint.
@@ -380,7 +469,7 @@ def update_dependency_or_constraint(
     Propose-only: stages constraint without mutating production configuration.
     """
     guardrail_manager.check_and_increment_quota("update_dependency_or_constraint")
-    g = _resolve_graph(graph_name)
+    g = _resolve_graph(graph_name or snapshot_id or snapshot_sha)
     start_time = time.time()
     flight_recorder.log_tool_call("update_dependency_or_constraint", {
         "source_resource": source_resource,
@@ -438,9 +527,12 @@ def update_dependency_or_constraint(
 # ============================================================================
 
 def simulate_fix_in_sandbox(
-    snapshot_sha: str,
-    candidate_set_id: str,
-    candidate_ids: Optional[List[str]] = None
+    snapshot_sha: Optional[str] = None,
+    candidate_set_id: Optional[str] = None,
+    candidate_ids: Optional[List[str]] = None,
+    snapshot_id: Optional[str] = None,
+    graph_name: Optional[str] = None,
+    **kwargs
 ) -> SimulateFixResponse:
     """
     Counterfactual Sandbox Simulation using FalkorDB native GRAPH.COPY.
@@ -449,35 +541,38 @@ def simulate_fix_in_sandbox(
     """
     guardrail_manager.check_and_increment_quota("simulate_fix_in_sandbox")
     start_time = time.time()
+    target_sha = snapshot_sha or snapshot_id or graph_name or DEFAULT_GRAPH
+    target_cset = candidate_set_id or "optimal_set_cut_0"
+
     flight_recorder.log_tool_call("simulate_fix_in_sandbox", {
-        "snapshot_sha": snapshot_sha,
-        "candidate_set_id": candidate_set_id,
+        "snapshot_sha": target_sha,
+        "candidate_set_id": target_cset,
         "candidate_ids": candidate_ids
     })
 
-    actions = _candidate_action_registry.get(candidate_set_id, [])
+    actions = _candidate_action_registry.get(target_cset, [])
     if candidate_ids:
         actions = [a for a in actions if a.action_id in candidate_ids]
 
     sandbox_mgr = SandboxManager(auto_cleanup=True)
     report = sandbox_mgr.simulate(
-        src_graph=snapshot_sha,
-        candidate_set_id=candidate_set_id,
+        src_graph=target_sha,
+        candidate_set_id=target_cset,
         actions=actions,
     )
 
     # Register verification gate status
     guardrail_manager.register_verified_simulation(
-        snapshot_sha=snapshot_sha,
-        candidate_set_id=candidate_set_id,
+        snapshot_sha=target_sha,
+        candidate_set_id=target_cset,
         verification_status=report.verification_status,
         surviving_paths=report.surviving_attack_paths,
         broken_flows=report.broken_required_flows,
     )
 
     flight_recorder.log_sandbox_run(
-        snapshot_sha=snapshot_sha,
-        candidate_set_id=candidate_set_id,
+        snapshot_sha=target_sha,
+        candidate_set_id=target_cset,
         surviving_paths=report.surviving_attack_paths,
         broken_flows=report.broken_required_flows,
         status=report.verification_status.value,
@@ -486,8 +581,8 @@ def simulate_fix_in_sandbox(
 
     sim_res = sandbox_mgr.to_simulation_result(report)
     resp = SimulateFixResponse(
-        snapshot_sha=snapshot_sha,
-        candidate_set_id=candidate_set_id,
+        snapshot_sha=target_sha,
+        candidate_set_id=target_cset,
         simulation_result=sim_res,
     )
 
@@ -500,9 +595,12 @@ def simulate_fix_in_sandbox(
 # ============================================================================
 
 def commit_verified_remediation(
-    snapshot_sha: str,
-    candidate_set_id: str,
-    applied_candidate_ids: Optional[List[str]] = None
+    snapshot_sha: Optional[str] = None,
+    candidate_set_id: Optional[str] = None,
+    applied_candidate_ids: Optional[List[str]] = None,
+    snapshot_id: Optional[str] = None,
+    graph_name: Optional[str] = None,
+    **kwargs
 ) -> CommitRemediationResponse:
     """
     Commit verified remediation to the cluster/repository.
@@ -511,16 +609,19 @@ def commit_verified_remediation(
     """
     guardrail_manager.check_and_increment_quota("commit_verified_remediation")
     start_time = time.time()
+    target_sha = snapshot_sha or snapshot_id or graph_name or DEFAULT_GRAPH
+    target_cset = candidate_set_id or "optimal_set_cut_0"
+
     flight_recorder.log_tool_call("commit_verified_remediation", {
-        "snapshot_sha": snapshot_sha,
-        "candidate_set_id": candidate_set_id,
+        "snapshot_sha": target_sha,
+        "candidate_set_id": target_cset,
         "applied_candidate_ids": applied_candidate_ids
     })
 
     # ENFORCE VERIFICATION GATE
-    guardrail_manager.assert_verification_gate(snapshot_sha, candidate_set_id)
+    guardrail_manager.assert_verification_gate(target_sha, target_cset)
 
-    actions = _candidate_action_registry.get(candidate_set_id, [])
+    actions = _candidate_action_registry.get(target_cset, [])
     if applied_candidate_ids:
         actions = [a for a in actions if a.action_id in applied_candidate_ids]
 

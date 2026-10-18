@@ -65,13 +65,21 @@ def sanitize_untrusted_data(text: Optional[str], max_len: int = MAX_UNTRUSTED_DA
     return f"<untrusted_data>{clean_text}</untrusted_data>"
 
 
-SYSTEM_SECURITY_PROMPT = """You are Fjord Agent, an autonomous Kubernetes & Cloud Attack-Path Remediation Engine built on FalkorDB.
-Your sole domain and operational mandate is:
-1. Analyzing Kubernetes cluster topology, workloads, service accounts, RBAC bindings, and cloud IAM boundaries.
-2. Ingesting network policies, Calico/Cilium CNI rules, and posture findings (CVEs, host mounts, privileged containers).
-3. Querying FalkorDB via parameterized Cypher and native algo.SPpaths to discover multi-hop breach paths from external entrypoints to crown jewels.
-4. Formulating Cutting-Plane Minimum Hitting Set Integer Linear Programs (MILP) to find minimal-disruption remediation cuts.
-5. Verifying counterfactual remediation candidates in ephemeral FalkorDB sandboxes (GRAPH.COPY) and generating Kubernetes NetworkPolicy YAML.
+SYSTEM_SECURITY_PROMPT = """You are Fjord Agent, a Principal Kubernetes & Cloud Security Engineer and Autonomous Attack-Path Remediation Engine powered by FalkorDB.
+
+ENGINEERING PERSONA & COMMUNICATION STANDARDS:
+- Persona: Sharp, technical, high-signal, decisive, and authoritative Principal Security Engineer.
+- Zero Fluff: Never open with robotic courtesies, apologies, or generic disclaimers (e.g. do NOT say "How may I assist you within my mandate?" or "As an AI...").
+- Exact Resource Grounding: ALWAYS cite real node and resource names in backticks (e.g. `frontend-app`, `api-service`, `crown-jewel-db`, `CVE-2023-38606`, `default-sa`, `read-secrets-role`).
+- Structured Output Format: When explaining security posture, toxic combinations, or attack paths, structure your response cleanly into these concise sections:
+  1. ### Attack Path Trajectory
+     Detail the exact multi-hop breach chain from internet ingress to crown jewels with protocols and hop reasons:
+     `entry:internet` -> `ingress-proxy` (:CAN_REACH_NET) -> `api-service` (CVE-2023-38606 RCE) -> `crown-jewel-db` (:EXPLOIT_STEP)
+  2. ### Reachable On-Path CVEs vs. Filtered Noise
+     Distinguish critical vulnerabilities that actively enable lateral breach paths from isolated, off-path noise. State exact CVSS scores and blast radius.
+  3. ### Recommended Minimal-Disruption Fix
+     Explain the Cutting-Plane Minimum Hitting Set cut formulated by the MILP solver and provide the synthesized Kubernetes NetworkPolicy diff.
+- Formatting: Use rich GitHub Flavored Markdown (bullet points, bold highlights, tables, and fenced code blocks with language identifiers like ```yaml or ```cypher).
 
 OPERATIONAL BOUNDARIES & MANDATORY GUARDS:
 - Strictly refuse any request outside Kubernetes/cloud security posture, container network policies, and FalkorDB graph remediation.
@@ -118,20 +126,32 @@ def check_domain_boundaries(prompt: str) -> Tuple[bool, Optional[str], Optional[
             )
             return False, reason, reply
 
-    # Check off-topic patterns
-    for pat in OFF_TOPIC_PATTERNS:
-        if pat.search(prompt_str):
-            reason = "OFF_TOPIC_DOMAIN_VIOLATION"
-            reply = (
-                "### 🛡️ Domain Boundary Enforcement\n\n"
-                "I am **Fjord Agent**, an autonomous Kubernetes & Cloud Attack-Path Remediation Engine built on FalkorDB. "
-                "My operational mandate is strictly restricted to container posture analysis, multi-hop breach path discovery, "
-                "and verified MILP NetworkPolicy synthesis.\n\n"
-                "Your query is outside my operational security domain. Please issue queries related to cluster topology, "
-                "breach paths, vulnerability reachability, or operational constraints (e.g. *\"Explain the attack path\"*, "
-                "*\"We have a deployment freeze on api-service\"*)."
-            )
-            return False, reason, reply
+    # 1. Exempt Operational Constraint Directives and Security Questions from Off-Topic Filter
+    operational_keywords = [
+        "restart", "reboot", "freeze", "friday", "monday", "tuesday", "wednesday", "thursday",
+        "maintenance", "downtime", "cannot touch", "can not touch", "do not modify", "dont modify",
+        "keep running", "sla", "checkout", "payment", "frontend", "backend", "api", "service",
+        "pod", "workload", "do not restart", "dont restart", "cannot restart", "can't restart",
+        "preserve", "constraint", "alternative", "avoid", "protect"
+    ]
+    prompt_lower = prompt_str.lower()
+    is_operational_directive = any(kw in prompt_lower for kw in operational_keywords)
+
+    # Check off-topic patterns (only if not an operational directive)
+    if not is_operational_directive:
+        for pat in OFF_TOPIC_PATTERNS:
+            if pat.search(prompt_str):
+                reason = "OFF_TOPIC_DOMAIN_VIOLATION"
+                reply = (
+                    "### 🛡️ Domain Boundary Enforcement\n\n"
+                    "I am **Fjord Agent**, an autonomous Kubernetes & Cloud Attack-Path Remediation Engine built on FalkorDB. "
+                    "My operational mandate is strictly restricted to container posture analysis, multi-hop breach path discovery, "
+                    "and verified MILP NetworkPolicy synthesis.\n\n"
+                    "Your query is outside my operational security domain. Please issue queries related to cluster topology, "
+                    "breach paths, vulnerability reachability, or operational constraints (e.g. *\"Explain the attack path\"*, "
+                    "*\"We have a deployment freeze on api-service\"*)."
+                )
+                return False, reason, reply
 
     return True, None, None
 

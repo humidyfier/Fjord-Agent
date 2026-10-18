@@ -63,27 +63,50 @@ class FalkorDBManager:
             result = graph.query(cypher, params=params)
         return result.result_set if result else []
 
+    def query_with_header(
+        self,
+        graph_name: str,
+        cypher: str,
+        params: Optional[Dict[str, Any]] = None,
+        read_only: bool = False
+    ) -> tuple:
+        """
+        Execute Cypher query and return (header_column_names, rows).
+        """
+        graph = self.get_graph(graph_name)
+        if read_only and hasattr(graph, "ro_query"):
+            result = graph.ro_query(cypher, params=params)
+        else:
+            result = graph.query(cypher, params=params)
+
+        headers: List[str] = []
+        if result and hasattr(result, "header") and result.header:
+            for h in result.header:
+                if isinstance(h, (list, tuple)) and len(h) > 1:
+                    headers.append(str(h[1]))
+                else:
+                    headers.append(str(h))
+        rows = result.result_set if result else []
+        return headers, rows
+
     def copy_graph(self, src_graph: str, dst_graph: str) -> bool:
         """
         Perform native FalkorDB GRAPH.COPY from src_graph to dst_graph.
         Used for zero-overhead counterfactual sandboxing.
         """
-        try:
-            # Register in LRU before copy
-            self._track_snapshot(dst_graph)
-            self.client.connection.execute_command("GRAPH.COPY", src_graph, dst_graph)
-            return True
-        except redis.exceptions.ResponseError as e:
-            err_str = str(e).upper()
-            if "OOM" in err_str or "MAXMEMORY" in err_str or "COULD NOT FORK" in err_str:
-                self._evict_oldest_unused_snapshot()
-                time.sleep(0.1)
-                try:
-                    self.client.connection.execute_command("GRAPH.COPY", src_graph, dst_graph)
-                    return True
-                except Exception:
-                    pass
-            raise
+        self._track_snapshot(dst_graph)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.client.connection.execute_command("GRAPH.COPY", src_graph, dst_graph)
+                return True
+            except redis.exceptions.ResponseError as e:
+                err_str = str(e).upper()
+                if ("OOM" in err_str or "MAXMEMORY" in err_str or "COULD NOT FORK" in err_str) and attempt < max_retries - 1:
+                    self._evict_oldest_unused_snapshot()
+                    time.sleep(0.3 * (attempt + 1))
+                    continue
+                raise
 
     def delete_graph(self, graph_name: str) -> bool:
         """Delete a graph from FalkorDB."""
@@ -140,11 +163,18 @@ class FalkorDBManager:
                 if evicted >= 3:
                     break
         try:
-            # Clean up unreferenced sandbox_sim_* keys directly from Redis under memory pressure
-            for k in self.client.connection.keys("sandbox_sim_*"):
-                k_str = k.decode('utf-8', errors='ignore') if isinstance(k, bytes) else str(k)
-                if k_str not in self._snapshot_lru or self._snapshot_lru.get(k_str, 0) <= 0:
-                    self.delete_graph(k_str)
+            # Query actual graphs directly from FalkorDB via GRAPH.LIST to prevent fork / OOM errors
+            graphs = self.client.connection.execute_command("GRAPH.LIST")
+            protected = {"sentinel_memory", "fjord_main", "topology"}
+            candidates = []
+            for g in (graphs or []):
+                g_str = g.decode('utf-8', errors='ignore') if isinstance(g, bytes) else str(g)
+                if g_str not in protected and (g_str.startswith("sandbox_sim_") or g_str.startswith("prod_")):
+                    if self._snapshot_lru.get(g_str, 0) <= 0:
+                        candidates.append(g_str)
+            if len(graphs) > MAX_SNAPSHOT_GRAPHS or candidates:
+                for c in candidates[:max(5, len(graphs) - MAX_SNAPSHOT_GRAPHS)]:
+                    self.delete_graph(c)
         except Exception:
             pass
 

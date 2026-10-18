@@ -75,6 +75,59 @@ class AgentOrchestrator:
             self.logger.log_tool_result(tool_name, None, duration, error=str(exc))
             raise
 
+    def compact_tool_payload(self, tool_name: str, res_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Single-turn tool batching: compacts intermediate tool payloads so token usage
+        and round-trip latency remain minimal, avoiding LLM socket read timeouts.
+        """
+        if not isinstance(res_dict, dict):
+            return {"status": "SUCCESS", "summary": str(res_dict)[:200]}
+
+        if tool_name == "compute_optimal_remediations":
+            cands = res_dict.get("optimal_candidates", [])
+            return {
+                "candidate_set_id": res_dict.get("candidate_set_id"),
+                "status": res_dict.get("status"),
+                "candidate_count": len(cands),
+                "primary_candidate": {
+                    "candidate_id": cands[0].get("candidate_id") if cands else None,
+                    "remediation_type": cands[0].get("remediation_type") if cands else None,
+                    "target_resource": cands[0].get("target_resource_name") or cands[0].get("target_resource") if cands else None,
+                    "disruption_cost": cands[0].get("disruption_cost") if cands else None,
+                } if cands else None,
+            }
+        elif tool_name == "simulate_fix_in_sandbox":
+            return {
+                "status": res_dict.get("status"),
+                "surviving_paths_count": res_dict.get("surviving_paths_count", 0),
+                "broken_required_flows_count": res_dict.get("broken_required_flows_count", 0),
+                "sandbox_sha": res_dict.get("sandbox_sha"),
+            }
+        elif tool_name == "discover_attack_paths":
+            paths = res_dict.get("paths", [])
+            return {
+                "path_count": res_dict.get("path_count", len(paths)),
+                "paths": [p.get("path_id") for p in paths[:3]],
+            }
+        elif tool_name == "get_posture_and_cluster_summary":
+            return {
+                "graph_name": res_dict.get("graph_name"),
+                "workload_count": res_dict.get("workload_count"),
+                "active_attack_path_count": res_dict.get("active_attack_path_count"),
+                "findings_by_severity": res_dict.get("findings_by_severity"),
+                "exact_cve_ids_in_graph": res_dict.get("exact_cve_ids_in_graph", []),
+                "exact_misconfig_ids_in_graph": res_dict.get("exact_misconfig_ids_in_graph", []),
+                "cve_notice": res_dict.get("cve_notice"),
+                "actual_findings": res_dict.get("actual_findings", []),
+            }
+        elif tool_name == "update_dependency_or_constraint":
+            return {
+                "status": res_dict.get("status"),
+                "constraint_type": res_dict.get("constraint_type"),
+                "target_resource": res_dict.get("target_resource"),
+            }
+        return {k: v for k, v in res_dict.items() if k not in ("paths", "optimal_candidates", "simulation_result")}
+
     def record_operator_decision(
         self,
         candidate_set_id: str,
@@ -136,3 +189,92 @@ class AgentOrchestrator:
             "recorded": True,
             "operator": operator_identity,
         }
+
+
+def normalize_model_slug(raw_model: str, provider: str = "Google Gemini") -> str:
+    """
+    Normalizes human-readable or legacy model strings to valid API slugs.
+    Handles spaces, uppercase, models/ prefixes, and maps unreleased/fictional slugs.
+    """
+    if not raw_model:
+        return "gemini-2.5-flash" if "gemini" in provider.lower() else "gpt-4o"
+
+    slug = raw_model.strip().lower()
+    if slug.startswith("models/"):
+        slug = slug[len("models/"):]
+    slug = slug.replace(" ", "-").replace("_", "-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+
+    provider_lower = provider.lower() if provider else ""
+
+    if "gemini" in provider_lower or "google" in provider_lower:
+        # Map unreleased or fictional versions to supported Google API slugs
+        if any(x in slug for x in ["3.8", "3.1", "3.0", "3-8", "3-1", "3-0"]):
+            if "lite" in slug:
+                return "gemini-2.5-flash-lite"
+            if "pro" in slug:
+                return "gemini-2.5-pro"
+            return "gemini-2.5-flash"
+
+        gemini_valid = {
+            "gemini-2.5-flash": "gemini-2.5-flash",
+            "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+            "gemini-2.5-pro": "gemini-2.5-pro",
+            "gemini-2.0-flash": "gemini-2.0-flash",
+            "gemini-2.0-flash-lite": "gemini-2.0-flash-lite",
+            "gemini-1.5-flash": "gemini-1.5-flash",
+            "gemini-1.5-pro": "gemini-1.5-pro",
+        }
+        if slug in gemini_valid:
+            return gemini_valid[slug]
+        if "flash-lite" in slug:
+            return "gemini-2.5-flash-lite"
+        elif "flash" in slug:
+            return "gemini-2.5-flash"
+        elif "pro" in slug:
+            return "gemini-2.5-pro"
+        return slug or "gemini-2.5-flash"
+
+    elif "anthropic" in provider_lower or "claude" in provider_lower:
+        if "3-7" in slug or "3.7" in slug:
+            return "claude-3-7-sonnet-latest"
+        elif "3-5-haiku" in slug or "3.5-haiku" in slug:
+            return "claude-3-5-haiku-latest"
+        elif "3-5" in slug or "3.5" in slug:
+            return "claude-3-5-sonnet-latest"
+        return slug or "claude-3-7-sonnet-latest"
+
+    else:
+        if "llama" in slug:
+            return "llama-3.3-70b-versatile"
+        elif "mini" in slug:
+            return "gpt-4o-mini"
+        elif "4o" in slug:
+            return "gpt-4o"
+        return slug or "gpt-4o"
+
+
+def sanitize_hallucinated_cves(reply: str, valid_cve_ids: set, misconfig_ids: list) -> str:
+    """
+    Checks every CVE-\\d{4}-\\d+ regex match in the LLM's output against the set of real cve_ids
+    in the active FalkorDB graph. If the LLM outputs any CVE-XXXX-XXXX not present in the graph,
+    replaces/strips that hallucinated CVE string and grounds the response strictly in actual findings.
+    """
+    if not reply:
+        return reply
+
+    import re
+    pattern = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
+    valid_upper = {c.upper() for c in valid_cve_ids if c}
+
+    def _replace_cve(match):
+        raw_cve = match.group(0).upper()
+        if raw_cve in valid_upper:
+            return raw_cve
+        # Hallucinated CVE detected!
+        if misconfig_ids:
+            return f"{misconfig_ids[0]} (Misconfiguration)"
+        return "Kubernetes Misconfiguration Finding"
+
+    return pattern.sub(_replace_cve, reply)

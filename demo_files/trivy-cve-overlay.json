@@ -1,0 +1,32 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "nginx:1.19",
+  "ArtifactType": "container_image",
+  "Results": [
+    {
+      "Target": "nginx:1.19 (debian 10.4)",
+      "Class": "os-pkgs",
+      "Type": "debian",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2021-23017",
+          "PkgName": "nginx",
+          "InstalledVersion": "1.19.0-1~buster",
+          "FixedVersion": "1.20.1-1~buster",
+          "Severity": "CRITICAL",
+          "Title": "nginx: 1-byte memory overwrite in resolver",
+          "Description": "A 1-byte memory overwrite vulnerability in nginx resolver could allow remote code execution or denial of service.",
+          "CweIDs": [
+            "CWE-78",
+            "CWE-94"
+          ],
+          "CVSS": {
+            "nvd": {
+              "V3Score": 9.8
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

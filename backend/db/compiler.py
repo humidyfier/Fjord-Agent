@@ -227,18 +227,19 @@ class ExploitGraphCompiler:
         """
         db_manager.query(self.graph_name, cypher_priv)
 
-        # 4C. WorkerNode -> Host Workloads Compromise
-        cypher_node_to_workload = """
-        MATCH (wn:WorkerNode), (w:Workload)
+        # 4C. WorkerNode -> Host Filesystem / Crown Jewel Compromise (Forward DAG only)
+        cypher_node_to_cj = """
+        MATCH (wn:WorkerNode), (cj:CrownJewel)
+        WHERE cj.id = 'host-root-filesystem' OR cj.category = 'HOST_NODE'
         MERGE (wn)-[r:EXPLOIT_STEP {
             step_type: 'CONTAINER_ESCAPE',
-            technique: 'NODE_TO_POD_PIVOT',
+            technique: 'NODE_TO_ROOT_PIVOT',
             mechanism: 'KUBELET_ROOT_TAKEOVER',
             cost: 0.2,
-            description: 'Root access on worker node compromises hosted workload'
-        }]->(w)
+            description: 'Root access on worker node compromises host root filesystem'
+        }]->(cj)
         """
-        db_manager.query(self.graph_name, cypher_node_to_workload)
+        db_manager.query(self.graph_name, cypher_node_to_cj)
 
     def _compile_cloud_bridges(self):
         # 5. Workload -> IAM Role -> Cloud Crown Jewel
@@ -281,6 +282,18 @@ class ExploitGraphCompiler:
         }]->(cj)
         """
         db_manager.query(self.graph_name, cypher_hosts_workload)
+
+        cypher_can_access = """
+        MATCH (w:Workload)-[:CAN_ACCESS]->(cj:CrownJewel)
+        MERGE (w)-[r:EXPLOIT_STEP {
+            step_type: 'SECRET_ACCESS',
+            technique: 'DIRECT_ASSET_ACCESS',
+            mechanism: 'CAN_ACCESS_CROWN_JEWEL',
+            cost: 0.1,
+            description: 'Workload can directly access crown jewel asset'
+        }]->(cj)
+        """
+        db_manager.query(self.graph_name, cypher_can_access)
 
     def _compile_crown_jewel_sinks(self):
         # 7. CrownJewel -> VirtualSink

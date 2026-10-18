@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FJORD AGENT // KUBERNETES & CLOUD ATTACK-PATH REMEDIATION ENGINE</title>
   
+  <script>
+    window.escapeHtmlChars = function(str) {
+      if (str === null || str === undefined) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+    window.escapeHtml = window.escapeHtmlChars;
+    function escapeHtml(str) { return window.escapeHtmlChars(str); }
+    function escapeHtmlChars(str) { return window.escapeHtmlChars(str); }
+  </script>
+
   <!-- Typography: Space Grotesk, Inter, JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,6 +25,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
   
+  <!-- Marked.js & DOMPurify for Rich Formatted Chat Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -22,7 +35,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Custom Archival CSS -->
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=dragdrop_v1">
 
   <script>
     tailwind.config = {
@@ -110,7 +123,7 @@
             <span>AGENT COPILOT</span>
           </button>
           <button onclick="switchView('dashboard')" id="nav-dashboard" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition nav-item-active">
-            <i class="fa-solid fa-layer-group text-wiz-emerald w-4 text-center"></i>
+            <i class="fa-solid fa-layer-group w-4 text-center"></i>
             <span>OVERVIEW & GRAPH</span>
           </button>
           <button onclick="switchView('connectors')" id="nav-connectors" class="w-full text-left px-3.5 py-2 flex items-center space-x-2.5 transition text-archival-cream/70 hover:text-archival-cream hover:bg-obsidian-850">
@@ -127,46 +140,21 @@
         <div>
           <div class="text-[9px] font-mono uppercase tracking-wider text-archival-faint flex items-center justify-between mb-1.5">
             <span>SCAN HISTORY</span>
-            <span id="scan-history-count" class="text-[9px] text-archival-cream bg-obsidian-800 px-1 rounded">1</span>
+            <span id="scan-history-count" class="text-[9px] text-archival-cream bg-obsidian-800 px-1 rounded">0</span>
           </div>
           <div id="scan-history-list" class="space-y-1 font-mono text-[11px]">
-            <button onclick="loadScenario('sample_cluster')" class="w-full text-left p-2 rounded bg-obsidian-850 hover:bg-obsidian-800 border border-wiz-emerald/50 transition text-archival-cream">
-              <div class="font-bold text-[10px] text-wiz-emerald flex items-center justify-between">
-                <span>E-Commerce Core</span>
-                <span class="text-[8px] px-1 bg-obsidian-800 rounded">ACTIVE</span>
-              </div>
-              <div class="text-[9px] text-archival-faint">3 Workloads · 1 Crown Jewel</div>
-            </button>
+            <div id="scan-history-empty" class="p-3 text-[10px] text-archival-faint font-mono text-center border border-dashed border-obsidian-border rounded">
+              No scans uploaded yet.
+            </div>
           </div>
         </div>
 
-        <!-- Section 2: Reference Test Fixtures (/tests) -->
-        <div>
-          <button onclick="toggleSection('fixtures-container')" class="w-full text-[9px] font-mono uppercase tracking-wider text-archival-faint flex items-center justify-between hover:text-archival-cream">
-            <span class="flex items-center space-x-1">
-              <i class="fa-solid fa-folder-closed text-[10px]"></i>
-              <span>TEST FIXTURES (/tests)</span>
-            </span>
-            <i id="fixtures-chevron" class="fa-solid fa-chevron-down text-[9px] transition-transform"></i>
+        <!-- Section 2: Upload Manifest / Scan Action -->
+        <div class="pt-1">
+          <button onclick="openUploadModal()" id="btn-sidebar-upload" class="w-full p-2.5 rounded bg-obsidian-850 hover:bg-obsidian-800 border border-obsidian-border hover:border-wiz-emerald/60 text-archival-cream transition flex items-center justify-center space-x-2 text-xs font-mono font-bold shadow-xs">
+            <i class="fa-solid fa-cloud-arrow-up text-wiz-emerald"></i>
+            <span>+ Upload Manifest / Scan (.yaml / .json)</span>
           </button>
-          <div id="fixtures-container" class="mt-1.5 space-y-1 font-mono text-[11px]">
-            <button onclick="loadScenario('sample_cluster')" class="w-full text-left p-1.5 rounded bg-obsidian-950 hover:bg-obsidian-850 border border-obsidian-border text-archival-cream transition">
-              <div class="font-bold text-[10px] truncate">1. Task 0 Calico CNI</div>
-              <div class="text-[9px] text-archival-faint">E-Commerce Ingress &rarr; DB</div>
-            </button>
-            <button onclick="loadScenario('kubehound_reference')" class="w-full text-left p-1.5 rounded bg-obsidian-950 hover:bg-obsidian-850 border border-obsidian-border text-archival-cream transition">
-              <div class="font-bold text-[10px] truncate">2. KubeHound RBAC Escape</div>
-              <div class="text-[9px] text-archival-faint">Privileged Pod &rarr; Host Breakout</div>
-            </button>
-            <button onclick="loadScenario('kubernetes_goat')" class="w-full text-left p-1.5 rounded bg-obsidian-950 hover:bg-obsidian-850 border border-obsidian-border text-archival-cream transition">
-              <div class="font-bold text-[10px] truncate">3. Kubernetes Goat Pods</div>
-              <div class="text-[9px] text-archival-faint">docker.sock Mount &rarr; Node Takeover</div>
-            </button>
-            <button onclick="loadScenario('bad_pods')" class="w-full text-left p-1.5 rounded bg-obsidian-950 hover:bg-obsidian-850 border border-obsidian-border text-archival-cream transition">
-              <div class="font-bold text-[10px] truncate">4. Bad Pods Escalation</div>
-              <div class="text-[9px] text-archival-faint">Multi-CVE Lateral Movement</div>
-            </button>
-          </div>
         </div>
 
       </div>
@@ -180,15 +168,15 @@
         <div class="space-y-1 text-[9px] text-archival-faint">
           <div class="flex justify-between">
             <span>SNAPSHOT:</span>
-            <span id="telemetry-snapshot-id" class="text-archival-cream font-bold truncate max-w-[130px]">prod_...</span>
+            <span id="telemetry-snapshot-id" class="text-archival-cream font-bold truncate max-w-[130px]">None</span>
           </div>
           <div class="flex justify-between">
-            <span>LLM PROVIDER:</span>
-            <span id="telemetry-llm-provider" class="text-wiz-blue font-bold">Google Gemini</span>
+            <span>LLM:</span>
+            <span id="telemetry-llm-provider" class="text-archival-faint font-bold">NOT CONFIGURED</span>
           </div>
           <div class="flex justify-between">
             <span>MODEL:</span>
-            <span id="telemetry-llm-model" class="text-archival-cream font-bold">gemini-3.8-flash</span>
+            <span id="telemetry-llm-model" class="text-archival-faint font-bold">NOT CONFIGURED</span>
           </div>
         </div>
         <button onclick="resetWorkspaceState()" class="w-full mt-1 px-2 py-1 rounded bg-obsidian-850 hover:bg-obsidian-800 border border-obsidian-border text-wiz-crimson text-[10px] font-bold transition flex items-center justify-center space-x-1">
@@ -215,13 +203,18 @@
             FJORD AGENT
           </span>
           <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-archival-stone arch-border text-archival-muted whitespace-nowrap">
-            SCENARIO: <span id="dash-active-scenario" class="font-bold text-archival-ink">sample_cluster</span>
+            CLUSTER: <span id="dash-active-scenario" class="font-bold text-archival-ink">NONE LOADED</span>
           </span>
         </div>
 
         <!-- Top Bar Action Controls (Strict Single-Line Flexbox) -->
         <div class="flex items-center space-x-1.5 shrink-0 whitespace-nowrap">
           
+          <!-- Dropzone Pill in Header Toolbar -->
+          <button onclick="openUploadModal()" id="header-dropzone-pill" title="Drag and drop .yaml or .json files anywhere, or click to upload" class="px-2.5 py-1 rounded text-xs font-mono font-bold flex items-center space-x-1.5 whitespace-nowrap shrink-0">
+            <span>📥 Drag &amp; Drop .YAML / .JSON or Click to Upload</span>
+          </button>
+
           <!-- Upload Button -->
           <button onclick="openUploadModal()" title="Upload Manifest or Scan" class="px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink text-xs font-mono font-bold transition flex items-center space-x-1 shadow-sm whitespace-nowrap shrink-0">
             <i class="fa-solid fa-cloud-arrow-up text-wiz-blue text-[10px]"></i>
@@ -256,11 +249,11 @@
               <i class="fa-solid fa-route text-wiz-crimson text-xs"></i>
             </div>
             <div class="flex items-baseline space-x-1.5 my-0.5">
-              <span id="kpi-path-count" class="font-display font-bold text-2xl tracking-tight text-wiz-crimson">1</span>
-              <span class="text-[9px] font-mono text-archival-faint">PATH · 3 HOPS</span>
+              <span id="kpi-path-count" class="font-display font-bold text-2xl tracking-tight text-wiz-crimson">0</span>
+              <span id="kpi-path-subtitle" class="text-[9px] font-mono text-archival-faint">0 PATHS</span>
             </div>
-            <div class="text-[9px] font-mono text-archival-muted truncate">
-              FalkorDB <code class="bg-archival-stone px-1 py-0.5 rounded text-[8px]">algo.SPpaths</code>
+            <div id="kpi-path-detail" class="text-[9px] font-mono text-archival-muted truncate">
+              Awaiting cluster upload
             </div>
           </div>
 
@@ -268,14 +261,14 @@
           <div onclick="drillDownToxicCombinations()" class="kpi-card p-2.5 arch-border-r flex flex-col justify-between" title="Click to highlight toxic chains and inspect multi-factor risk breakdown">
             <div class="flex items-center justify-between text-[10px] font-mono text-archival-muted">
               <span>TOXIC COMBINATIONS</span>
-              <span class="w-2 h-2 rounded-full bg-wiz-crimson animate-ping"></span>
+              <span class="w-2 h-2 rounded-full bg-archival-faint"></span>
             </div>
             <div class="flex items-baseline space-x-1.5 my-0.5">
-              <span id="kpi-toxic-count" class="font-display font-bold text-2xl tracking-tight text-wiz-crimson">1</span>
-              <span class="text-[9px] font-mono text-archival-faint">ACTIVE CHAIN</span>
+              <span id="kpi-toxic-count" class="font-display font-bold text-2xl tracking-tight text-archival-faint">0</span>
+              <span id="kpi-toxic-subtitle" class="text-[9px] font-mono text-archival-faint">0 CHAINS</span>
             </div>
-            <div class="text-[9px] font-mono text-wiz-crimson truncate font-semibold">
-              <i class="fa-solid fa-triangle-exclamation mr-1"></i>Ingress &rarr; CVE &rarr; DB
+            <div id="kpi-toxic-detail" class="text-[9px] font-mono text-archival-muted truncate font-semibold">
+              No active toxic chains
             </div>
           </div>
 
@@ -286,11 +279,11 @@
               <i class="fa-solid fa-bullseye text-wiz-ochre text-xs"></i>
             </div>
             <div class="flex items-baseline space-x-1.5 my-0.5">
-              <span id="kpi-findings-count" class="font-display font-bold text-2xl tracking-tight text-wiz-ochre">1</span>
-              <span class="text-[9px] font-mono text-archival-faint">CRITICAL / 9 NOISE</span>
+              <span id="kpi-findings-count" class="font-display font-bold text-2xl tracking-tight text-archival-faint">0</span>
+              <span id="kpi-findings-subtitle" class="text-[9px] font-mono text-archival-faint">0 CVEs</span>
             </div>
-            <div class="text-[9px] font-mono text-wiz-emerald truncate font-semibold">
-              <i class="fa-solid fa-filter mr-1"></i>90% Noise Filtered
+            <div id="kpi-findings-detail" class="text-[9px] font-mono text-archival-muted truncate font-semibold">
+              Awaiting scan upload
             </div>
           </div>
 
@@ -301,6 +294,40 @@
           
           <div id="wiz-attack-canvas" class="wiz-dotted-canvas">
             
+            <!-- Full-Canvas High-Tech Glowing Drag-and-Drop Overlay -->
+            <div id="graph-drop-overlay" class="drop-overlay" style="display: none;">
+              <div class="drop-overlay-box">
+                <div class="drop-icon">⚡</div>
+                <div class="drop-title">DROP KUBERNETES .YAML OR TRIVY/K8S .JSON HERE</div>
+                <div class="drop-subtitle">Instant compilation into FalkorDB Property Graph &amp; Acyclic Attack-Path Engine</div>
+              </div>
+            </div>
+
+            <!-- Centered Empty State Card (Visible when no cluster graph is loaded) -->
+            <div id="canvas-empty-state" class="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-auto bg-archival-bg/95">
+              <div class="max-w-md p-6 rounded-lg arch-border bg-archival-surface text-center space-y-3.5 shadow-sm mx-4">
+                <div class="w-12 h-12 rounded-full bg-archival-stone flex items-center justify-center mx-auto text-wiz-blue text-xl border border-archival-border">
+                  <i class="fa-solid fa-cloud-arrow-up"></i>
+                </div>
+                <div class="space-y-1">
+                  <h3 class="font-display font-bold text-base text-archival-ink uppercase tracking-wide">No Cluster Graph Loaded</h3>
+                  <p class="text-xs font-mono text-archival-muted leading-relaxed">
+                    Upload a Kubernetes manifest (.yaml) or vulnerability scan (.json) to compile the FalkorDB exploit plane and discover attack paths.
+                  </p>
+                </div>
+                <div class="pt-1 flex flex-col sm:flex-row gap-2 justify-center">
+                  <button onclick="openUploadModal()" class="px-4 py-2 rounded bg-obsidian-900 hover:bg-obsidian-800 text-archival-cream text-xs font-mono font-bold transition flex items-center justify-center space-x-2 shadow">
+                    <i class="fa-solid fa-cloud-arrow-up text-wiz-emerald"></i>
+                    <span>+ Upload Manifest (.yaml) / Scan (.json)</span>
+                  </button>
+                  <button onclick="loadScenario('sample_cluster')" class="px-3 py-2 rounded arch-border bg-archival-stone hover:bg-archival-border text-archival-ink text-xs font-mono font-bold transition flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-vial text-wiz-ochre"></i>
+                    <span>Load Demo Cluster</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- Floating Top-Left Title -->
             <div class="absolute top-3.5 left-4 z-10 pointer-events-none select-none">
               <div class="text-[11px] font-mono font-bold tracking-wider uppercase text-archival-ink flex items-center space-x-2">
@@ -336,13 +363,13 @@
 
             <!-- Floating Bottom-Left Zoom Controls Pill -->
             <div class="absolute bottom-4 left-4 z-10 inline-flex items-center rounded-full arch-border bg-archival-surface/95 backdrop-blur-xs p-1 shadow-md space-x-1">
-              <button onclick="zoomWizCanvas(1.15)" class="w-6 h-6 rounded-full hover:bg-archival-stone flex items-center justify-center text-archival-ink text-xs font-bold transition" title="Zoom In">
+              <button onclick="zoomWizCanvas(1.15)" id="btn-zoom-in" class="w-6 h-6 rounded-full hover:bg-archival-stone flex items-center justify-center text-archival-ink text-xs font-bold transition" title="Zoom In">
                 <i class="fa-solid fa-plus text-[10px]"></i>
               </button>
-              <button onclick="zoomWizCanvas(0.85)" class="w-6 h-6 rounded-full hover:bg-archival-stone flex items-center justify-center text-archival-ink text-xs font-bold transition" title="Zoom Out">
+              <button onclick="zoomWizCanvas(0.85)" id="btn-zoom-out" class="w-6 h-6 rounded-full hover:bg-archival-stone flex items-center justify-center text-archival-ink text-xs font-bold transition" title="Zoom Out">
                 <i class="fa-solid fa-minus text-[10px]"></i>
               </button>
-              <button onclick="resetWizCanvas()" class="w-6 h-6 rounded-full hover:bg-archival-stone flex items-center justify-center text-archival-ink text-xs font-bold transition" title="Reset View">
+              <button onclick="resetWizCanvas()" id="btn-zoom-reset" class="w-6 h-6 rounded-full hover:bg-archival-stone flex items-center justify-center text-archival-ink text-xs font-bold transition" title="Reset View">
                 <i class="fa-solid fa-compress text-[10px]"></i>
               </button>
             </div>
@@ -382,48 +409,76 @@
           <div class="h-7 bg-archival-stone/50 arch-border-b px-4 flex items-center justify-between text-[10px] font-mono font-bold text-archival-muted">
             <span class="flex items-center space-x-2">
               <i class="fa-solid fa-clipboard-check text-wiz-emerald"></i>
-              <span>REMEDIATION ACTIONS QUEUE (CUTTING-PLANE MILP SOLUTION)</span>
+              <span id="remediation-queue-header-title">REMEDIATION ACTIONS QUEUE (CUTTING-PLANE MILP SOLUTION)</span>
             </span>
-            <span id="remediation-status-pill" class="px-1.5 py-0.5 rounded bg-wiz-emeraldBg text-wiz-emerald border border-wiz-emerald/30">
-              VERIFIED_IN_MODEL
+            <span id="remediation-status-pill" class="px-1.5 py-0.5 rounded bg-archival-stone text-archival-muted border border-archival-border">
+              AWAITING INGESTION
             </span>
           </div>
+          <div id="run-agent-trace-banner" style="display:none; margin-bottom: 16px;" class="px-4 py-2 bg-obsidian-950 text-archival-cream text-[10px] font-mono arch-border-b"></div>
+          <div id="agent-trace-banner" class="hidden px-4 py-1.5 bg-obsidian-950 text-archival-cream text-[10px] font-mono arch-border-b flex flex-wrap items-center gap-2"></div>
           <div id="remediation-queue-cards" class="flex-1 p-3 overflow-y-auto custom-scroll space-y-2 text-xs font-mono">
-            <div class="p-3 text-archival-muted text-[11px] font-mono">Computing optimal remediations from live graph...</div>
+            <div class="p-3 rounded arch-border bg-archival-bg text-archival-muted text-[11px] font-mono flex items-center justify-between">
+              <span>AWAITING CLUSTER INGESTION — Upload a Kubernetes YAML or Scan JSON to begin</span>
+              <span class="px-2 py-0.5 rounded bg-archival-stone text-archival-muted border border-archival-border font-bold text-[10px]">AWAITING CLUSTER INGESTION</span>
+            </div>
           </div>
         </div>
 
       </div>
 
       <!-- =============================================================== -->
-      <!-- VIEW 2: AGENT COPILOT (Conversational Chatbot & FastMCP Trace)    -->
+      <!-- VIEW 2: AGENT COPILOT (Conversational Chatbot Console)             -->
       <!-- =============================================================== -->
       <div id="view-copilot" class="flex-1 flex overflow-hidden hidden">
         
-        <!-- Left Chat Column -->
-        <div class="flex-1 flex flex-col bg-archival-bg arch-border-r min-w-0">
+        <!-- Full-Width Chat Column -->
+        <div class="flex-1 flex flex-col bg-archival-bg min-w-0">
           
           <!-- Chat Header -->
           <div class="h-10 bg-archival-surface arch-border-b px-4 flex items-center justify-between text-xs font-mono shrink-0">
             <div class="flex items-center space-x-2">
               <span class="w-2.5 h-2.5 rounded-full bg-wiz-emerald animate-pulse"></span>
-              <span class="font-bold text-archival-ink">AUTONOMOUS SECURITY COPILOT (GEMINI 3.8 FLASH)</span>
+              <span class="font-bold text-archival-ink">AUTONOMOUS SECURITY COPILOT</span>
             </div>
-            <span class="text-[10px] text-archival-muted font-bold">REASONING + TOOL DISPATCH</span>
+            <span class="text-[10px] text-archival-muted font-bold">REASONING + FASTMCP TOOL DISPATCH</span>
+          </div>
+
+          <!-- Clean Banner When No Cluster Is Loaded -->
+          <div id="copilot-no-cluster-banner" class="p-2.5 bg-archival-stone/60 arch-border-b text-[11px] font-mono text-archival-muted flex items-center justify-between shrink-0">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-circle-info text-wiz-blue"></i>
+              <span>No cluster graph loaded. Upload a .yaml manifest or .json scan to analyze attack paths, or ask general Kubernetes posture questions.</span>
+            </div>
+            <button onclick="openUploadModal()" class="px-2 py-0.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink font-bold text-[10px]">
+              + Upload
+            </button>
+          </div>
+
+          <!-- Mandatory LLM API Key Warning Banner (Shown when no key is configured) -->
+          <div id="chat-key-warning-banner" class="hidden p-3.5 bg-wiz-crimsonBg border-b border-wiz-crimson/30 flex items-center justify-between text-xs font-mono text-wiz-crimson shrink-0">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-triangle-exclamation text-sm"></i>
+              <span class="font-bold">[!] LLM API Key Required. Autonomous tool dispatch and reasoning require a provider API key.</span>
+            </div>
+            <button onclick="switchView('settings')" class="px-3 py-1.5 rounded bg-wiz-crimson text-white hover:bg-red-700 transition font-bold shadow-xs flex items-center space-x-1.5 whitespace-nowrap">
+              <i class="fa-solid fa-gear text-[10px]"></i>
+              <span>Configure API Key in Settings</span>
+            </button>
           </div>
 
           <!-- Prompt Shortcut Badges -->
           <div class="p-2.5 bg-archival-stone/40 arch-border-b flex flex-wrap gap-1.5 text-[10px] font-mono shrink-0">
-            <button onclick="sendQuickPrompt('Explain the attack path from the internet to the crown jewel.')" class="px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone transition text-archival-ink font-semibold">
+            <button onclick="sendQuickPrompt('Explain the attack path from the internet to the crown jewel.')" class="quick-prompt-btn px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone transition text-archival-ink font-semibold">
               🔍 Explain Attack Path
             </button>
-            <button onclick="sendQuickPrompt('We have a deployment freeze on api-service, find an alternative remediation.')" class="px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone transition text-archival-ink font-semibold">
+            <button onclick="sendQuickPrompt('We have a deployment freeze on api-service, find an alternative remediation.')" class="quick-prompt-btn px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone transition text-archival-ink font-semibold">
               ❄️ Freeze api-service Constraint
             </button>
-            <button onclick="sendQuickPrompt('Summarize cluster security posture and high-severity CVEs.')" class="px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone transition text-archival-ink font-semibold">
+            <button onclick="sendQuickPrompt('Summarize cluster security posture and high-severity CVEs.')" class="quick-prompt-btn px-2 py-1 rounded arch-border bg-archival-surface hover:bg-archival-stone transition text-archival-ink font-semibold">
               📊 Posture Summary
             </button>
-            <button onclick="sendQuickPrompt('Write a chocolate cake recipe.')" class="px-2 py-1 rounded arch-border bg-wiz-crimsonBg/50 hover:bg-wiz-crimsonBg text-wiz-crimson transition font-semibold" title="Test domain refusal guardrail">
+            <button onclick="sendQuickPrompt('Write a chocolate cake recipe.')" class="quick-prompt-btn px-2 py-1 rounded arch-border bg-wiz-crimsonBg/50 hover:bg-wiz-crimsonBg text-wiz-crimson transition font-semibold" title="Test domain refusal guardrail">
               🛡️ Test Guardrail Refusal
             </button>
           </div>
@@ -435,40 +490,23 @@
                 <span class="font-bold text-wiz-emerald">FJORD AGENT CORE</span>
                 <span>SYSTEM</span>
               </div>
-              <div class="text-archival-ink space-y-1">
-                <p>Ready to analyze cluster topology and synthesize minimal-disruption NetworkPolicies.</p>
-                <p class="text-[11px] text-archival-muted">You can request multi-hop breach proofs, declare operational freeze constraints, or simulate cutting-plane solutions.</p>
+              <div class="chat-message-body text-archival-ink">
+                <p>Autonomous security engine initialized. Ready to compile exploit planes, verify hitting-set NetworkPolicies, and trace multi-hop lateral movements.</p>
+                <p class="text-[12px] text-archival-muted mt-1">Upload a cluster manifest to run prioritized posture analysis, or ask questions below.</p>
               </div>
             </div>
           </div>
 
           <!-- Chat Input Bar -->
           <div class="p-3 bg-archival-surface arch-border-t shrink-0">
-            <form onsubmit="handleChatSubmit(event)" class="flex space-x-2">
-              <input type="text" id="chat-input" placeholder="Ask Fjord about attack paths, declare operational constraints, or request explanation..." class="flex-1 px-3 py-2 text-xs font-mono rounded arch-border bg-archival-bg text-archival-ink focus:outline-none focus:border-wiz-crimson">
-              <button type="submit" id="btn-chat-send" class="px-4 py-2 rounded bg-obsidian-900 hover:bg-obsidian-800 text-archival-cream text-xs font-mono font-bold transition">
+            <form onsubmit="handleChatSubmit(event)" autocomplete="off" class="flex space-x-2 items-end">
+              <textarea id="chat-input" rows="1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" placeholder="Ask Fjord about attack paths, declare operational constraints, or request explanation..." class="flex-1 px-3 py-2 text-xs font-mono rounded arch-border bg-archival-bg text-archival-ink focus:outline-none focus:border-wiz-crimson resize-none" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();handleChatSubmit(event);}"></textarea>
+              <button type="submit" id="btn-chat-send" class="px-4 py-2 rounded bg-obsidian-900 hover:bg-obsidian-800 text-archival-cream text-xs font-mono font-bold transition h-[34px] flex items-center justify-center">
                 <span>SEND</span>
               </button>
             </form>
           </div>
 
-        </div>
-
-        <!-- Right FastMCP Flight Trace Column -->
-        <div class="w-[320px] bg-archival-surface flex flex-col shrink-0">
-          <div class="h-10 bg-archival-stone arch-border-b px-3 flex items-center justify-between text-xs font-mono font-bold text-archival-ink shrink-0">
-            <span>FASTMCP FLIGHT TRACE</span>
-            <span class="text-[9px] px-1.5 py-0.5 rounded bg-archival-surface arch-border text-archival-muted">LIVE LOG</span>
-          </div>
-          <div id="flight-trace-feed" class="flex-1 p-3 overflow-y-auto custom-scroll space-y-2 text-[11px] font-mono">
-            <div class="p-2 rounded arch-border bg-archival-bg space-y-1">
-              <div class="flex justify-between text-[9px] text-archival-faint">
-                <span>get_posture_and_cluster_summary</span>
-                <span class="text-wiz-emerald font-bold">3.8 ms</span>
-              </div>
-              <div class="text-[10px] text-archival-muted truncate">FalkorDB query ro_query prod_cluster</div>
-            </div>
-          </div>
         </div>
 
       </div>
@@ -587,6 +625,15 @@
               <p class="text-[10px] text-archival-muted">Zero-drift GRAPH.COPY sandbox verification (surviving paths == 0).</p>
             </div>
 
+            <!-- Tool 7 -->
+            <div class="p-3 rounded arch-border bg-archival-surface space-y-2">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-archival-ink">7. commit_verified_remediation</span>
+                <button onclick="testMCPTool('commit_verified_remediation', {snapshot_sha: 'current', candidate_set_id: 'current'})" class="px-2 py-0.5 rounded bg-obsidian-900 text-archival-cream text-[10px] font-bold hover:bg-obsidian-800">Test Live</button>
+              </div>
+              <p class="text-[10px] text-archival-muted">Commits verified candidate to cluster with kubeconform validation and re-ingest proof.</p>
+            </div>
+
           </div>
 
           <!-- Tool Result Viewer Console -->
@@ -632,7 +679,7 @@
 
             <div>
               <label class="block text-[11px] text-archival-muted font-bold mb-1">MODEL ID</label>
-              <input type="text" id="setting-model" value="gemini-3.8-flash" class="w-full px-3 py-2 rounded arch-border bg-archival-bg text-archival-ink focus:outline-none">
+              <input type="text" id="setting-model" value="gemini-2.5-flash" class="w-full px-3 py-2 rounded arch-border bg-archival-bg text-archival-ink focus:outline-none">
             </div>
 
             <div>
@@ -672,7 +719,7 @@
     <!-- ================================================================= -->
     <!-- RIGHT RECORD INSPECTOR DRAWER: Warm Stone (#ECE7DC, 360px fixed)  -->
     <!-- ================================================================= -->
-    <aside id="right-inspector-drawer" class="w-[360px] bg-archival-stone arch-border-l flex flex-col shrink-0 text-archival-ink z-20">
+    <aside id="right-inspector-drawer" class="w-[360px] bg-archival-stone arch-border-l flex flex-col shrink-0 text-archival-ink z-20 collapsed">
       
       <!-- Drawer Header Bar with Retractable Close Button -->
       <div class="h-12 bg-archival-stone arch-border-b px-4 flex items-center justify-between shrink-0">
@@ -723,7 +770,7 @@
         <!-- Tab 2: Remediation YAML Patch -->
         <div id="inspector-tab-yaml" class="space-y-3 hidden">
           <div class="flex items-center justify-between text-[10px]">
-            <span class="text-archival-muted font-bold">KUBERNETES NETWORKPOLICY PATCH</span>
+            <span id="yaml-patch-header-title" class="text-archival-muted font-bold">KUBERNETES MANIFEST PATCH</span>
             <div class="flex space-x-1">
               <button onclick="copyYamlPatch()" class="px-2 py-0.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink font-bold">Copy</button>
               <button onclick="downloadYamlPatch()" class="px-2 py-0.5 rounded arch-border bg-archival-surface hover:bg-archival-stone text-archival-ink font-bold">Download</button>
@@ -743,7 +790,7 @@
               <span>READ-ONLY CYPHER QUERY RUNNER</span>
               <span class="text-wiz-emerald">FALKORDB</span>
             </div>
-            <textarea id="cypher-query-input" rows="3" class="w-full p-2 text-[10px] font-mono rounded arch-border bg-archival-surface text-archival-ink focus:outline-none focus:border-wiz-crimson" placeholder="MATCH (n) RETURN labels(n), count(n)">MATCH (s:VirtualSource)-[r:EXPLOIT_STEP*]->(d:VirtualSink) RETURN r</textarea>
+            <textarea id="cypher-query-input" rows="3" class="w-full p-2 text-[10px] font-mono rounded arch-border bg-archival-surface text-archival-ink focus:outline-none focus:border-wiz-crimson" placeholder="MATCH (n) RETURN labels(n), count(n)">MATCH (src)-[r:EXPLOIT_STEP]->(dst) RETURN src.name AS source, r.step_type AS mechanism, dst.name AS target, r.cost AS cost</textarea>
             <div class="flex justify-between items-center pt-1">
               <div class="flex space-x-1">
                 <button onclick="setCypherTemplate('paths')" class="text-[9px] px-1.5 py-0.5 rounded arch-border bg-archival-surface text-archival-muted hover:text-archival-ink">Paths</button>
@@ -774,15 +821,22 @@
             <p class="text-[11px] text-archival-ink leading-relaxed">
               Verify counterfactual simulation results before applying remediation to the production cluster.
             </p>
-            <div class="text-[10px] space-y-1 text-archival-muted">
-              <div>Surviving Attack Paths: <span class="font-bold text-wiz-emerald">0 (100% eliminated)</span></div>
+            <div class="text-[10px] space-y-1.5 text-archival-muted">
+              <div>Surviving Modeled Attack Paths: <span class="font-bold text-wiz-emerald">0 (All modeled paths severed in FalkorDB sandbox)</span></div>
               <div>Broken Required Flows: <span class="font-bold text-wiz-emerald">0 (Preserved)</span></div>
+              <div class="p-1.5 rounded arch-border bg-archival-stone/40 text-[9px] text-archival-ink space-y-0.5">
+                <div class="font-bold text-archival-faint uppercase text-[8px]">Collateral Impact & Evaluated Workloads</div>
+                <div>• Evaluated Workloads: <span id="approval-gate-evaluated-workloads" class="font-mono text-wiz-blue">vulnerable-nginx, internal-service, crown-jewel-db</span></div>
+                <div>• Non-Target Disruption: <span class="font-mono text-wiz-emerald">0 Services Impacted</span></div>
+                <div>• Blast Radius Containment: <span class="font-mono text-wiz-emerald">Modeled Path Containment: All Modeled Paths Severed [DESIGN TARGET: Scoped to FalkorDB Sandbox]</span></div>
+              </div>
               <div>Verification Gate: <span class="font-bold text-wiz-emerald">VERIFIED_IN_MODEL</span></div>
             </div>
           </div>
 
           <!-- Action Gate Buttons -->
           <div class="space-y-2 pt-2">
+            <div class="text-[9px] text-archival-muted italic text-center px-1">Safe Sandbox Commit Mode: Commits state to local session ledger only (No external production cluster mutation). Enforces strict one-time idempotency.</div>
             <button onclick="approveAndCommitRemediation()" id="btn-approve-commit" class="w-full py-2.5 rounded bg-wiz-emerald hover:bg-emerald-700 text-white font-bold transition flex items-center justify-center space-x-1.5 shadow">
               <i class="fa-solid fa-check"></i>
               <span>APPROVE & COMMIT REMEDIATION</span>
@@ -809,12 +863,13 @@
         <span class="w-1.5 h-1.5 rounded-full bg-wiz-emerald"></span>
         <span class="text-archival-cream font-bold">FALKORDB GRAPH REASONING ENGINE</span>
       </span>
-      <span>SESSION: <span id="footer-session-id" class="text-archival-cream">session_init</span></span>
-      <span>GATE: <span id="footer-gate-status" class="text-wiz-emerald font-bold">VERIFIED_IN_MODEL</span></span>
+      <span>SESSION: <span id="footer-session-id" class="text-archival-cream">None</span></span>
+      <span>GATE: <span id="footer-gate-status" class="text-archival-muted font-bold">AWAITING INGESTION</span></span>
+      <span>LLM: <span id="footer-llm-status" class="text-archival-faint font-bold">NOT CONFIGURED</span></span>
     </div>
     <div class="flex items-center space-x-3">
-      <span>CPU TIME: <span id="footer-cpu-time" class="text-archival-cream">11.4ms</span></span>
-      <span>ZERO DRIFT: <span class="text-wiz-emerald font-bold">ENFORCED</span></span>
+      <span>CPU TIME: <span id="footer-cpu-time" class="text-archival-cream">0.0ms</span></span>
+      <span>ZERO DRIFT: <span id="footer-zero-drift" class="text-archival-muted font-bold">PENDING INGESTION</span></span>
     </div>
   </footer>
 
@@ -923,7 +978,7 @@
           </div>
           <div class="p-2.5 rounded arch-border bg-archival-bg space-y-1">
             <div class="text-[10px] text-archival-faint">REQUIRED FLOWS PRESERVED</div>
-            <div class="text-lg font-bold text-wiz-emerald">100% (0 Broken)</div>
+            <div class="text-lg font-bold text-wiz-emerald">0 Broken (All Preserved)</div>
           </div>
         </div>
         <p class="text-[10px] text-archival-muted leading-relaxed">
@@ -937,6 +992,6 @@
   </div>
 
   <!-- Core Application JavaScript -->
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=dragdrop_v1"></script>
 </body>
 </html>

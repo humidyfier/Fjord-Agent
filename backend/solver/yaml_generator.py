@@ -88,6 +88,13 @@ class NetworkPolicyYAMLGenerator:
                     yaml_patches.append(patch)
                 except Exception as exc:
                     logger.error("Failed to generate RBAC unbind manifest for %s -> %s: %s", sa_id, role_id, exc)
+            elif action.remediation_type == RemediationType.WORKLOAD_HARDEN_SECURITY_CONTEXT:
+                wl_id = action.mutation_params.get("wl_id", "")
+                try:
+                    patch = self._generate_workload_harden_manifest(wl_id)
+                    yaml_patches.append(patch)
+                except Exception as exc:
+                    logger.error("Failed to generate workload harden manifest for %s: %s", wl_id, exc)
             elif action.remediation_type == RemediationType.RBAC_ROLE_RESTRICT:
                 sa_id = action.mutation_params.get("sa_id", "")
                 role_name = action.mutation_params.get("role_name", "") or action.mutation_params.get("role_id", "")
@@ -269,6 +276,41 @@ class NetworkPolicyYAMLGenerator:
                     "eks.amazonaws.com/role-arn": None,
                 },
             },
+        }
+        return yaml.dump(manifest, default_flow_style=False, sort_keys=False)
+
+    def _generate_workload_harden_manifest(self, wl_id: str) -> str:
+        """Synthesise a Kubernetes Deployment/Workload patch manifest removing sensitive hostPath mounts and hardening securityContext."""
+        wl_ns, wl_name = _parse_workload_id(wl_id)
+        manifest = {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "name": wl_name,
+                "namespace": wl_ns,
+                "annotations": {
+                    FJORD_MANAGED_ANNOTATION: FJORD_MANAGED_VALUE,
+                    FJORD_AUDIT_ANNOTATION: f"[Workload Hardening] Drop sensitive hostPath mount and enforce non-privileged securityContext on {wl_name}",
+                },
+            },
+            "spec": {
+                "template": {
+                    "spec": {
+                        "hostNetwork": False,
+                        "hostPID": False,
+                        "containers": [
+                            {
+                                "name": wl_name,
+                                "securityContext": {
+                                    "privileged": False,
+                                    "allowPrivilegeEscalation": False,
+                                    "readOnlyRootFilesystem": True
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
         }
         return yaml.dump(manifest, default_flow_style=False, sort_keys=False)
 

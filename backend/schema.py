@@ -35,7 +35,7 @@ NODE_LABELS = {
 
 
 # ============================================================================
-# EXACT 16 RELATIONSHIP TYPES (Inventory + Exploit Plane)
+# EXACT RELATIONSHIP TYPES (Inventory + Exploit Plane)
 # ============================================================================
 
 REL_TYPES = [
@@ -44,7 +44,9 @@ REL_TYPES = [
     "SELECTS",
     "HAS_CONTAINER",
     "AFFECTED_BY",
+    "HAS_FINDING",
     "CAN_REACH_NET",
+    "CAN_ACCESS",
     "USES_SA",
     "BOUND_TO",
     "ALLOWS_API",
@@ -56,6 +58,7 @@ REL_TYPES = [
     "REQUIRED_DEPENDENCY",
     "EXPLOIT_STEP",
 ]
+
 
 
 # ============================================================================
@@ -169,6 +172,10 @@ class PostureSummaryResponse(BaseModel):
     active_attack_path_count: int
     findings_by_severity: Dict[str, int]
     findings_summary: List[PostureFindingSummary] = Field(default_factory=list)
+    actual_findings: List[Dict[str, Any]] = Field(default_factory=list)
+    exact_cve_ids_in_graph: List[str] = Field(default_factory=list)
+    exact_misconfig_ids_in_graph: List[str] = Field(default_factory=list)
+    cve_notice: Optional[str] = None
 
 
 # ============================================================================
@@ -240,8 +247,9 @@ class ComputeOptimalRemediationsResponse(BaseModel):
 # ============================================================================
 
 class InspectResourceContextRequest(BaseModel):
-    resource_kind: str
-    resource_name: str
+    resource_kind: Optional[str] = "Workload"
+    resource_name: Optional[str] = None
+    resource_id: Optional[str] = None
     namespace: str = "default"
     graph_name: Optional[str] = None
 
